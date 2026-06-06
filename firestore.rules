@@ -15,12 +15,14 @@ service cloud.firestore {
         && isValidId(documentId)
         && isValidAppState(incoming())
         && (
-          // connection_test_placeholder får skrivas/läsas av alla för att testa uppkoppling
-          (documentId == 'connection_test_placeholder')
-          // user_roles can only be written by super_admin eller Ibrahim direkt
-          || (documentId == 'user_roles' && (hasEmail('qallakiibrahim@gmail.com') || isSuperAdmin()))
+          // Super admins får ALLTID skriva ALT (Ibrahim eller registrerad super_admin)
+          isSuperAdmin()
+          // connection_test_placeholder får skrivas av alla för att testa uppkoppling
+          || (documentId == 'connection_test_placeholder')
           // history can be written by anyone
           || (documentId == 'history')
+          // user_roles kan BARA skrivas av super_admin
+          || (documentId == 'user_roles' && isSuperAdmin())
           // other configs can be written by process engineer or higher
           || (documentId != 'user_roles' && documentId != 'history' && isProcessEngineerOrHigher())
         );
@@ -59,20 +61,21 @@ service cloud.firestore {
       return request.auth.token.keys().hasAll(['email']) && request.auth.token.email.toLowerCase() == email.toLowerCase();
     }
 
-    // Hjälpfunktion för att hämta rollen på ett säkert sätt
+    // Hjälpfunktion för att hämta rollen på ett säkert sätt - med fallback om dokumentet inte finns
     function getUserRole() {
       let emailKey = request.auth.token.email.toLowerCase();
-      let userRolesDoc = get(/databases/$(database)/documents/app_state/user_roles);
-      return userRolesDoc.data.value[emailKey];
+      // Använd exists() för att säkert kontrollera om dokumentet finns innan vi läser det
+      return exists(/databases/$(database)/documents/app_state/user_roles) 
+        ? get(/databases/$(database)/documents/app_state/user_roles).data.value[emailKey]
+        : null;
     }
 
     function isSuperAdmin() {
       return isSignedIn() && isVerified() && (
+        // Ibrahim är alltid super_admin
         hasEmail('qallakiibrahim@gmail.com')
-        || (
-          exists(/databases/$(database)/documents/app_state/user_roles)
-          && getUserRole() == 'super_admin'
-        )
+        // Andra användare måste vara registrerade i user_roles
+        || getUserRole() == 'super_admin'
       );
     }
 
@@ -90,7 +93,6 @@ service cloud.firestore {
       );
     }
 
-    // FIXAD: Tog bort .size() == 2 eftersom det blockerar uppdatering av roller!
     function isValidAppState(data) {
       return data.keys().hasAll(['key', 'value']) 
         && data.key is string 
