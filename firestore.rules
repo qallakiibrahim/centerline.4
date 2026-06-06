@@ -13,7 +13,15 @@ service cloud.firestore {
       
       allow create, update: if isSignedIn() && isVerified()
         && isValidId(documentId)
-        && isValidAppState(incoming());
+        && isValidAppState(incoming())
+        && (
+          // user_roles can only be written by super_admin
+          (documentId == 'user_roles' && isSuperAdmin())
+          // history can be written by anyone
+          || (documentId == 'history')
+          // other configs can be written by process engineer or higher
+          || (documentId != 'user_roles' && documentId != 'history' && isProcessEngineerOrHigher())
+        );
       
       allow delete: if false; // Deny state deletion entirely to prevent data loss
     }
@@ -26,7 +34,8 @@ service cloud.firestore {
         || id == 'recipes' 
         || id == 'hierarchy' 
         || id == 'backgrounds' 
-        || id == 'history';
+        || id == 'history'
+        || id == 'user_roles';
     }
 
     function incoming() {
@@ -44,6 +53,30 @@ service cloud.firestore {
     function isVerified() {
       // Mandating email verification for live write stability
       return request.auth.token.email_verified == true;
+    }
+
+    function isSuperAdmin() {
+      return isSignedIn() && isVerified() && (
+        request.auth.token.email.toLowerCase() == 'qallakiibrahim@gmail.com'
+        || (
+          exists(/databases/$(database)/documents/app_state/user_roles)
+          && get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.toLowerCase()] == 'super_admin'
+        )
+      );
+    }
+
+    function isProcessEngineerOrHigher() {
+      return isSignedIn() && isVerified() && (
+        request.auth.token.email.toLowerCase() == 'qallakiibrahim@gmail.com'
+        || (
+          exists(/databases/$(database)/documents/app_state/user_roles)
+          && (
+            get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.toLowerCase()] == 'super_admin'
+            || get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.toLowerCase()] == 'line_leader'
+            || get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.toLowerCase()] == 'process_engineer'
+          )
+        )
+      );
     }
 
     function isValidAppState(data) {

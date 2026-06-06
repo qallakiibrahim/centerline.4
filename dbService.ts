@@ -58,8 +58,30 @@ export interface DatabaseService {
 // ---------------------------------------------------------
 // 🎒 Firebase Setup & Error Handlers
 // ---------------------------------------------------------
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId); /* CRITICAL: The app will break without this line */
+const getFirebaseConfig = () => {
+  const metaEnv = (import.meta as any).env || {};
+  if (
+    metaEnv.VITE_FIREBASE_API_KEY &&
+    metaEnv.VITE_FIREBASE_AUTH_DOMAIN &&
+    metaEnv.VITE_FIREBASE_PROJECT_ID
+  ) {
+    return {
+      apiKey: metaEnv.VITE_FIREBASE_API_KEY,
+      authDomain: metaEnv.VITE_FIREBASE_AUTH_DOMAIN,
+      projectId: metaEnv.VITE_FIREBASE_PROJECT_ID,
+      storageBucket: metaEnv.VITE_FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID,
+      appId: metaEnv.VITE_FIREBASE_APP_ID,
+      measurementId: metaEnv.VITE_FIREBASE_MEASUREMENT_ID,
+      firestoreDatabaseId: metaEnv.VITE_FIREBASE_DATABASE_ID || '(default)'
+    };
+  }
+  return firebaseConfig;
+};
+
+const finalConfig = getFirebaseConfig();
+const app = initializeApp(finalConfig);
+export const db = getFirestore(app, finalConfig.firestoreDatabaseId); /* CRITICAL: The app will break without this line */
 export const auth = getAuth(app);
 
 function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
