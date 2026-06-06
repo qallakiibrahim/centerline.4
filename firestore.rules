@@ -15,8 +15,10 @@ service cloud.firestore {
         && isValidId(documentId)
         && isValidAppState(incoming())
         && (
-          // user_roles can only be written by super_admin
-          (documentId == 'user_roles' && isSuperAdmin())
+          // connection_test_placeholder får skrivas/läsas av alla för att testa uppkoppling
+          (documentId == 'connection_test_placeholder')
+          // user_roles can only be written by super_admin eller Ibrahim direkt
+          || (documentId == 'user_roles' && (hasEmail('qallakiibrahim@gmail.com') || isSuperAdmin()))
           // history can be written by anyone
           || (documentId == 'history')
           // other configs can be written by process engineer or higher
@@ -30,20 +32,18 @@ service cloud.firestore {
     function isValidId(id) {
       return id == 'points' 
         || id == 'layout' 
+        || id == 'layouts' 
         || id == 'definitions' 
         || id == 'recipes' 
         || id == 'hierarchy' 
         || id == 'backgrounds' 
         || id == 'history'
-        || id == 'user_roles';
+        || id == 'user_roles'
+        || id == 'connection_test_placeholder';
     }
 
     function incoming() {
       return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
     }
 
     function isSignedIn() {
@@ -51,37 +51,48 @@ service cloud.firestore {
     }
 
     function isVerified() {
-      // Mandating email verification for live write stability
       return request.auth.token.email_verified == true;
+    }
+
+    // Säkerställer att auth-token faktiskt har en e-post innan vi gör toLowerCase()
+    function hasEmail(email) {
+      return request.auth.token.keys().hasAll(['email']) && request.auth.token.email.toLowerCase() == email.toLowerCase();
+    }
+
+    // Hjälpfunktion för att hämta rollen på ett säkert sätt
+    function getUserRole() {
+      let emailKey = request.auth.token.email.toLowerCase();
+      let userRolesDoc = get(/databases/$(database)/documents/app_state/user_roles);
+      return userRolesDoc.data.value[emailKey];
     }
 
     function isSuperAdmin() {
       return isSignedIn() && isVerified() && (
-        request.auth.token.email.lower() == 'qallakiibrahim@gmail.com'
+        hasEmail('qallakiibrahim@gmail.com')
         || (
           exists(/databases/$(database)/documents/app_state/user_roles)
-          && get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.lower()] == 'super_admin'
+          && getUserRole() == 'super_admin'
         )
       );
     }
 
     function isProcessEngineerOrHigher() {
       return isSignedIn() && isVerified() && (
-        request.auth.token.email.lower() == 'qallakiibrahim@gmail.com'
+        hasEmail('qallakiibrahim@gmail.com')
         || (
           exists(/databases/$(database)/documents/app_state/user_roles)
           && (
-            get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.lower()] == 'super_admin'
-            || get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.lower()] == 'line_leader'
-            || get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.lower()] == 'process_engineer'
+            getUserRole() == 'super_admin'
+            || getUserRole() == 'line_leader'
+            || getUserRole() == 'process_engineer'
           )
         )
       );
     }
 
+    // FIXAD: Tog bort .size() == 2 eftersom det blockerar uppdatering av roller!
     function isValidAppState(data) {
       return data.keys().hasAll(['key', 'value']) 
-        && data.keys().size() == 2 
         && data.key is string 
         && data.value != null;
     }
