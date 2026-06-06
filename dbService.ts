@@ -116,10 +116,10 @@ export class FirebaseDatabaseService implements DatabaseService {
     // Test the network connection to Firestore as requested by the rule
     const testConnection = async () => {
       try {
-        await getDocFromServer(doc(db, 'test_connection_placeholder', 'connection'));
+        await getDocFromServer(doc(db, 'app_state', 'connection_test_placeholder'));
       } catch (error) {
         if (error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration or network connection.");
+          console.warn("Firebase Connection Warning: The client is offline or cannot connect. Please verify your Firebase project settings (Project ID, API Lock, Auth Domain) in the settings menu or Firebase Console.");
         }
       }
     };
