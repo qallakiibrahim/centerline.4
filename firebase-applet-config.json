@@ -1,10 +1,10 @@
 {
-  "projectId": "vivid-kayak-nrr5c",
-  "appId": "1:1017903634535:web:844f78d107a3eebc815cc2",
-  "apiKey": "AIzaSyAGVxAfzKe3GVpRLgjkuCI1FG-FjtHx_lY",
-  "authDomain": "vivid-kayak-nrr5c.firebaseapp.com",
-  "firestoreDatabaseId": "remixed-firestore-database-id",
-  "storageBucket": "vivid-kayak-nrr5c.firebasestorage.app",
-  "messagingSenderId": "1017903634535",
-  "measurementId": ""
+  "projectId": "centerline-pro",
+  "appId": "1:127052366317:web:9cbf6c7903f3533eeae7e4",
+  "apiKey": "AIzaSyAiGo4ISHdhoH8NCosUGpFTGirskg127PM",
+  "authDomain": "centerline-pro.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "centerline-pro.firebasestorage.app",
+  "messagingSenderId": "127052366317",
+  "measurementId": "G-W0R88VYJSX"
 }
