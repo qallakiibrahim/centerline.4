@@ -1,0 +1,205 @@
+
+<!DOCTYPE html>
+<html lang="sv" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Centerline Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Configure Tailwind to use class-based dark mode
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {}
+        }
+      }
+    </script>
+    <script>
+      // Initialize theme immediately to prevent flashing
+      (function() {
+        try {
+          const theme = localStorage.getItem('theme') || 'dark';
+          if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+            document.documentElement.style.colorScheme = 'dark';
+          } else {
+            document.documentElement.classList.remove('dark');
+            document.documentElement.style.colorScheme = 'light';
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <style>
+      /* Force color-scheme based on class */
+      html {
+        color-scheme: light;
+      }
+      html.dark {
+        color-scheme: dark;
+      }
+
+      /* AGGRESSIVE THEME ENFORCEMENT */
+      
+      /* Light Mode: Force everything to be light */
+      html:not(.dark),
+      html:not(.dark) body,
+      html:not(.dark) select,
+      html:not(.dark) option,
+      html:not(.dark) input,
+      html:not(.dark) textarea,
+      html:not(.dark) ::placeholder {
+        color-scheme: light !important;
+        color: #0F172A;
+      }
+
+      /* Specific overrides for Select/Option in Light Mode */
+      html:not(.dark) select,
+      html:not(.dark) option {
+        background-color: #ffffff !important;
+        color: #0F172A !important;
+      }
+
+      /* Dark Mode: Force everything to be dark */
+      html.dark select, 
+      html.dark option {
+        color-scheme: dark !important;
+        background-color: #1f2937 !important;
+        color: #ffffff !important;
+      }
+
+      /* Force Light Dropdown Class - used by React components */
+      .force-light-dropdown {
+        color-scheme: light !important;
+        background-color: #ffffff !important;
+        color: #0F172A !important;
+        border-color: #e2e8f0 !important;
+      }
+      .force-light-dropdown option {
+        background-color: #ffffff !important;
+        color: #0F172A !important;
+      }
+
+      /* Override for specific states */
+      html:not(.dark) select:focus,
+      html:not(.dark) option:checked {
+        background-color: #e2e8f0 !important;
+        color: #0F172A !important;
+      }
+    </style>
+    <style>
+      /* Industriell scrollbar för skärm */
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: #f9fafb; }
+      ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+      
+      .dark ::-webkit-scrollbar-track { background: #030712; }
+      .dark ::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 10px; }
+
+      body {
+        margin: 0; padding: 0;
+        height: 100%; width: 100%;
+      }
+
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+
+      #root { height: 100%; display: flex; flex-direction: column; }
+
+      /* UTSKRIFTSOPTIMERING */
+      @media print {
+        @page {
+          size: A3 portrait;
+          margin: 10mm; /* Mindre marginal för att ramen ska ligga närmare kanten */
+        }
+
+        /* Tvinga färger */
+        * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
+
+        body, #root, main, section, p, span:not(.print-header-text), h1, h2, h3, h4, h5, h6, td, th {
+           color: black !important;
+        }
+
+        .print-header-text {
+           color: white !important;
+        }
+
+        /* DEN FASTA RAMEN (Endast sidor på varje sida) */
+        .print-frame-fixed {
+          display: block !important;
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          border-left: 8mm solid #0070C0;
+          border-right: 8mm solid #0070C0;
+          border-bottom: none;
+          border-top: none;
+          z-index: 9999;
+          pointer-events: none;
+        }
+
+        html, body {
+          background-color: white !important;
+          margin: 0 !important;
+          padding: 0 !important;
+        }
+
+        #root {
+          display: block !important;
+          height: auto !important;
+        }
+
+        main {
+          display: block !important;
+          padding: 0 12mm 12mm 12mm !important; /* Extra padding så texten inte hamnar under ramen */
+          margin: 0 !important;
+          width: 100% !important;
+          overflow: visible !important;
+        }
+
+        .bg-white.dark\:bg-gray-800.rounded-xl.border {
+          border: none !important;
+          box-shadow: none !important;
+        }
+
+        .max-w-6xl {
+          max-width: 100% !important;
+        }
+
+        /* Göm navigerings-element */
+        aside, nav, button, .print-hidden {
+          display: none !important;
+        }
+
+        .print-only { display: block !important; }
+      }
+      .print-frame-fixed, .print-only { display: none; }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@19.2.4",
+    "react-dom": "https://esm.sh/react-dom@19.2.4",
+    "lucide-react": "https://esm.sh/lucide-react@0.474.0",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
+  }
+}
+</script>
+</head>
+  <body class="bg-[#F8FAFC] dark:bg-gray-950 text-[#0F172A] dark:text-gray-100 antialiased overflow-hidden selection:bg-blue-500 selection:text-white transition-colors duration-300">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>

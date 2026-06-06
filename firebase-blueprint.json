@@ -1,0 +1,26 @@
+{
+  "entities": {
+    "AppStateItem": {
+      "title": "AppStateItem",
+      "description": "En enskild nyckel-värde post för applikationens tillstånd",
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "Unik nyckel för tillståndet (t.ex. points, layout, definitions, recipes)"
+        },
+        "value": {
+          "type": "object",
+          "description": "Det serialiserade JSON-objektet för tillståndet"
+        }
+      },
+      "required": ["key", "value"]
+    }
+  },
+  "firestore": {
+    "/app_state/{documentId}": {
+      "schema": "AppStateItem",
+      "description": "Innehåller alla synkade tillstånd för applikationen"
+    }
+  }
+}

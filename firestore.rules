@@ -1,0 +1,56 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Default-deny Catch-all Security Gateway
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Main App State syncer collection rules
+    match /app_state/{documentId} {
+      allow read: if isSignedIn() && isVerified();
+      
+      allow create, update: if isSignedIn() && isVerified()
+        && isValidId(documentId)
+        && isValidAppState(incoming());
+      
+      allow delete: if false; // Deny state deletion entirely to prevent data loss
+    }
+
+    // Standalone Helper functions
+    function isValidId(id) {
+      return id == 'points' 
+        || id == 'layout' 
+        || id == 'definitions' 
+        || id == 'recipes' 
+        || id == 'hierarchy' 
+        || id == 'backgrounds' 
+        || id == 'history';
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      // Mandating email verification for live write stability
+      return request.auth.token.email_verified == true;
+    }
+
+    function isValidAppState(data) {
+      return data.keys().hasAll(['key', 'value']) 
+        && data.keys().size() == 2 
+        && data.key is string 
+        && data.value != null;
+    }
+  }
+}
