@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { PointHistoryLog, MachinePoint, PointStatus } from '../types';
-import { Search, Filter, Calendar, BarChart3, Clock, AlertTriangle, CheckCircle2, Sliders, ChevronDown, ListFilter, Activity, MessageSquare } from 'lucide-react';
+import { Search, Filter, Calendar, BarChart3, Clock, AlertTriangle, CheckCircle2, Sliders, ChevronDown, ListFilter, Activity, MessageSquare, Download } from 'lucide-react';
 import { 
   LineChart, 
   Line, 
@@ -44,6 +44,65 @@ const HistoryView: React.FC<HistoryViewProps> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSection, setSelectedSection] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState<'All' | 'OK' | 'TAGS'>('All');
+  
+  const handleExportCSV = () => {
+    if (filteredHistory.length === 0) return;
+    
+    // Byte-order-mark (BOM) to force Excel to parse UTF-8 content correctly
+    const BOM = "\uFEFF";
+    
+    // Column headers
+    const headers = [
+      "Punkt ID",
+      "Punktnamn",
+      "Sektion",
+      "Förpackningsformat (Recept)",
+      "Uppmätt Värde",
+      "Börvärde (Target)",
+      "Tolerans",
+      "Status",
+      "Tidpunkt",
+      "Kommentar"
+    ];
+    
+    const rows = filteredHistory.map(log => {
+      const dateObj = new Date(log.timestamp);
+      const formattedDate = dateObj.toLocaleDateString('sv-SE') + ' ' + dateObj.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+      return [
+        log.pointId || '',
+        log.pointName || '',
+        log.section || '',
+        log.recipeName || 'Standard',
+        log.value || '',
+        log.targetValue || '',
+        log.tolerance || '',
+        log.status === PointStatus.OK ? 'OK' : 'TAGGAD',
+        formattedDate,
+        log.comment || ''
+      ];
+    });
+
+    // We use ';' as separator since Swedish locales use decimal comma (e.g. 8,5)
+    // Semicolon separates columns perfectly without breaking decimal floats in Excel.
+    const csvContent = BOM + [
+      headers.join(';'),
+      ...rows.map(row => row.map(val => {
+        const escaped = val.toString().replace(/"/g, '""');
+        return `"${escaped}"`;
+      }).join(';'))
+    ].join('\n');
+
+    // Create secure URL block and initiate download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    const fileName = `Centerline_Historik_${selectedMachineName || 'Process'}_${new Date().toISOString().substring(0,10)}.csv`;
+    link.setAttribute("download", fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
   
   // Filter global history so it ONLY contains points for the selected machine/line hierarchy!
   const machineSpecificHistory = useMemo(() => {
@@ -173,24 +232,24 @@ const HistoryView: React.FC<HistoryViewProps> = ({
   }, [machineSpecificHistory]);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-300">
+    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300">
       
       {/* SECTION 1: HEADER & STATS */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-gray-200 dark:border-gray-800 pb-4">
         <div>
-          <h2 className="text-2xl font-black text-gray-900 dark:text-white uppercase tracking-wider italic flex items-center gap-2">
+          <h2 className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white uppercase tracking-wider italic flex flex-wrap items-center gap-2">
             Optimering & Historik <span className="text-xs font-normal not-italic text-blue-500 font-mono bg-blue-500/10 px-2.5 py-1 rounded-full">{selectedMachineName || 'Process'}</span>
           </h2>
           <p className="text-xs text-slate-500 font-mono mt-1">
             Granskar {selectedMachineName ? `${selectedMachineName} (${selectedLineName})` : 'valda maskiner'}. Spårar centerline-börvärde och toleransavvikelser löpande.
           </p>
         </div>
-        <div className="flex gap-2">
-          <div className="bg-blue-500/10 border border-blue-500/20 px-4 py-2 rounded-xl text-center">
+        <div className="flex gap-2 w-full sm:w-auto">
+          <div className="flex-1 sm:flex-initial bg-blue-500/10 border border-blue-500/20 px-4 py-2 rounded-xl text-center">
             <span className="block text-xl font-bold text-blue-500 font-mono">{machineSpecificHistory.length}</span>
             <span className="text-[9px] font-black uppercase tracking-wider text-slate-500">Mätningar loggade</span>
           </div>
-          <div className="bg-red-500/10 border border-red-500/10 px-4 py-2 rounded-xl text-center">
+          <div className="flex-1 sm:flex-initial bg-red-500/10 border border-red-500/10 px-4 py-2 rounded-xl text-center">
             <span className="block text-xl font-bold text-red-500 font-mono">
               {machineSpecificHistory.filter(h => h.status === PointStatus.TAGGED_RED).length}
             </span>
@@ -200,7 +259,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({
       </div>
 
       {/* SECTION 2: INDIVIDUAL PARAMETER GRAPH / OPTIMIZATION (Slide 3/4/7 trend graph visualization) */}
-      <div className={`${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-white border-slate-200'} border p-6 rounded-3xl shadow-xl transition-colors duration-300`}>
+      <div className={`${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-white border-slate-200'} border p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-xl transition-colors duration-300`}>
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 pb-4 border-b border-gray-100 dark:border-gray-800">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-2xl text-blue-600 dark:text-blue-400">
@@ -215,7 +274,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({
           </div>
 
           {/* Point Selector */}
-          <div className="flex items-center gap-2 w-full lg:w-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full lg:w-auto">
             <span className="text-xs text-slate-500 font-bold whitespace-nowrap uppercase">Välj punkt:</span>
             <select
               value={selectedOptPointId}
@@ -355,7 +414,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({
       </div>
 
       {/* SECTION 3: HORIZONTAL HISTORICAL GRID (Horizontal Point Trace) */}
-      <div className={`${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-white border-slate-200'} border p-6 rounded-3xl shadow-xl transition-colors duration-300`}>
+      <div className={`${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-white border-slate-200'} border p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-xl transition-colors duration-300`}>
         <div className="flex items-center gap-3 mb-6 pb-4 border-b border-gray-100 dark:border-gray-800">
           <div className="p-3 bg-indigo-100 dark:bg-indigo-900/30 rounded-2xl text-indigo-600 dark:text-indigo-400">
             <Activity size={24} />
@@ -433,7 +492,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({
       </div>
 
       {/* SECTION 4: FULL RECONCILED HISTORIC LOG TIMELINE */}
-      <div className={`${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-white border-slate-200'} border p-6 rounded-3xl shadow-xl transition-colors duration-300`}>
+      <div className={`${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-white border-slate-200'} border p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-xl transition-colors duration-300`}>
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 border-b border-gray-100 dark:border-gray-800 pb-4">
           <div className="flex items-center gap-3">
             <div className="p-3 bg-amber-100 dark:bg-orange-900/30 rounded-2xl text-amber-600 dark:text-orange-400">
@@ -448,16 +507,16 @@ const HistoryView: React.FC<HistoryViewProps> = ({
           </div>
 
           {/* Table Filters */}
-          <div className="flex flex-wrap gap-2 w-full lg:w-auto">
+          <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2 w-full lg:w-auto">
             {/* Search */}
-            <div className="relative">
+            <div className="relative w-full sm:w-auto">
               <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-slate-400" size={14} />
               <input 
                 type="text" 
                 placeholder="Sök på punkt eller kommentar..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className={`pl-8 pr-3 py-1.5 rounded-lg text-xs font-bold border focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+                className={`pl-8 pr-3 py-1.5 rounded-lg text-xs font-bold border focus:outline-none focus:ring-1 focus:ring-blue-500 w-full sm:w-60 ${
                   theme === 'dark' ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-slate-200 text-slate-800'
                 }`}
               />
@@ -467,7 +526,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({
             <select
               value={selectedSection}
               onChange={(e) => setSelectedSection(e.target.value)}
-              className={`px-2 py-1.5 rounded-lg text-xs font-bold border focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+              className={`px-2 py-1.5 rounded-lg text-xs font-bold border focus:outline-none focus:ring-1 focus:ring-blue-500 w-full sm:w-auto ${
                 theme === 'dark' ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-slate-200 text-slate-800'
               }`}
             >
@@ -481,7 +540,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value as any)}
-              className={`px-2 py-1.5 rounded-lg text-xs font-bold border focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+              className={`px-2 py-1.5 rounded-lg text-xs font-bold border focus:outline-none focus:ring-1 focus:ring-blue-500 w-full sm:w-auto ${
                 theme === 'dark' ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-slate-200 text-slate-800'
               }`}
             >
@@ -489,11 +548,112 @@ const HistoryView: React.FC<HistoryViewProps> = ({
               <option value="OK">Endast OK</option>
               <option value="TAGS">Endast Taggar</option>
             </select>
+
+            {/* Export XLS/CSV Button */}
+            <button
+              onClick={handleExportCSV}
+              disabled={filteredHistory.length === 0}
+              title="Exportera filtrerad historik till excel/CSV"
+              className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all md:w-auto w-full ${
+                filteredHistory.length === 0
+                  ? 'opacity-40 cursor-not-allowed bg-gray-500/10 text-gray-500'
+                  : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md active:scale-[0.98]'
+              }`}
+            >
+              <Download size={13} />
+              Exportera Excel (CSV)
+            </button>
           </div>
         </div>
 
-        {/* Audit Trail Table */}
-        <div className="overflow-x-auto">
+        {/* Mobile View: Cards */}
+        <div className="space-y-3 md:hidden">
+          {filteredHistory.length > 0 ? (
+            filteredHistory.map((log) => {
+              const isOK = log.status === PointStatus.OK;
+              const dateObj = new Date(log.timestamp);
+              const formattedDate = dateObj.toLocaleDateString('sv-SE', { year: 'numeric', month: '2-digit', day: '2-digit' });
+              const formattedTime = dateObj.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+
+              return (
+                <div 
+                  key={log.id} 
+                  className={`p-4 rounded-xl border transition-all ${
+                    !isOK 
+                      ? (theme === 'dark' ? 'bg-red-550/[0.04] border-red-900/30' : 'bg-red-50 border-red-200')
+                      : (theme === 'dark' ? 'bg-gray-900/60 border-gray-800' : 'bg-slate-50 border-slate-200')
+                  }`}
+                >
+                  <div className="flex justify-between items-start gap-2 mb-2">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                        <span className="font-mono text-[9px] bg-slate-200 dark:bg-slate-800 text-slate-500 px-1 py-0.5 rounded font-black">
+                          {log.pointId}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                          <Clock size={10} />
+                          {formattedDate} {formattedTime}
+                        </span>
+                      </div>
+                      <h4 className="text-xs font-bold text-[#0F172A] dark:text-gray-200 leading-tight">
+                        {log.pointName}
+                      </h4>
+                    </div>
+                    {isOK ? (
+                      <span className="inline-flex items-center gap-1 text-green-500 font-bold uppercase text-[9px] shrink-0">
+                        <CheckCircle2 size={11} /> OK
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-red-500 font-black uppercase text-[9px] bg-red-500/10 px-2 py-0.5 rounded shrink-0">
+                        <AlertTriangle size={11} /> TAGG
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 py-2 my-2 border-y border-gray-100 dark:border-gray-800/60 text-center font-mono">
+                    <div>
+                      <span className="block text-[8px] uppercase tracking-wider text-slate-400 font-sans font-bold">Uppmätt</span>
+                      <span className={`text-xs font-black ${isOK ? 'text-green-500' : 'text-red-500'}`}>
+                        {log.value}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[8px] uppercase tracking-wider text-slate-400 font-sans font-bold">Börvärde</span>
+                      <span className="text-xs font-bold text-slate-600 dark:text-gray-300">
+                        {log.targetValue}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[8px] uppercase tracking-wider text-slate-400 font-sans font-bold">Tolerans</span>
+                      <span className="text-xs font-bold text-slate-500">
+                        {log.tolerance}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 mt-2 flex-wrap text-[10px]">
+                    <span className="font-bold text-slate-500 bg-slate-100 dark:bg-slate-800/40 px-2 py-0.5 rounded-md">
+                      Format: {log.recipeName || 'Standard'}
+                    </span>
+                    {log.comment && (
+                      <div className="min-w-0 max-w-[60%] flex items-center gap-1 text-slate-500 italic truncate" title={log.comment}>
+                        <MessageSquare size={10} className="shrink-0 text-blue-500" />
+                        <span className="truncate">{log.comment}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="py-6 text-center text-slate-500 italic text-xs">
+              Hittade inga loggade mätvärden som matchade dina filter.
+            </div>
+          )}
+        </div>
+
+        {/* Audit Trail Table (Desktop view: md and up) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-gray-100 dark:border-gray-800 opacity-60">

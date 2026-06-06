@@ -218,18 +218,18 @@ const PointDetail: React.FC<PointDetailProps> = ({
       <div className={`${theme === 'dark' ? 'bg-gray-800 border-gray-600' : 'bg-white border-[#E2E8F0]'} w-full max-w-6xl max-h-[95vh] rounded-2xl border shadow-xl overflow-hidden flex flex-col transition-colors duration-300`}>
         
         {/* Header */}
-        <div className={`flex justify-between items-center p-6 border-b ${theme === 'dark' ? 'border-gray-700 bg-gray-900' : 'border-[#E2E8F0] bg-slate-50'}`}>
+        <div className={`flex flex-col md:flex-row md:items-center justify-between p-6 border-b ${theme === 'dark' ? 'border-gray-700 bg-gray-900' : 'border-[#E2E8F0] bg-slate-50'} gap-4`}>
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
                <span className={`${theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-slate-200 text-slate-600'} px-2 py-1 rounded text-sm font-mono`}>{point.id}</span>
-               <h2 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-[#0F172A]'}`}>{point.name}</h2>
+               <h2 className={`text-xl md:text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-[#0F172A]'}`}>{point.name}</h2>
             </div>
             <p className="text-gray-400 mt-1">{point.section} &bull; Punkt #{point.number}</p>
           </div>
           
-          <div className="flex items-center gap-3 font-semibold">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 font-semibold flex-wrap">
             {/* Status Quick Select */}
-            <div className={`flex ${theme === 'dark' ? 'bg-gray-950 border-gray-700' : 'bg-slate-100 border-[#E2E8F0]'} p-1 rounded-xl border`}>
+            <div className={`flex flex-wrap ${theme === 'dark' ? 'bg-gray-950 border-gray-700' : 'bg-slate-100 border-[#E2E8F0]'} p-1 rounded-xl border`}>
               <button 
                 onClick={() => handleStatusChange(PointStatus.OK)}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${point.status === PointStatus.OK || !point.status ? 'bg-green-600 text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-gray-300'}`}
@@ -250,20 +250,22 @@ const PointDetail: React.FC<PointDetailProps> = ({
               </button>
             </div>
 
-            <div className="h-8 w-px bg-gray-300 dark:bg-gray-700 mx-2"></div>
+            <div className="hidden sm:block h-8 w-px bg-gray-300 dark:bg-gray-700 mx-1"></div>
 
-            {isP1 && (
-              <span className="px-3 py-1 bg-red-100 dark:bg-red-900/50 text-[#DC2626] dark:text-red-200 text-xs font-bold uppercase rounded border border-red-200 dark:border-red-800 flex items-center gap-2">
-                <AlertOctagon size={14} />
-                P1: Kritisk
-              </span>
-            )}
-            {isP2 && (
-              <span className="px-3 py-1 bg-amber-100 dark:bg-orange-900/50 text-[#D97706] dark:text-orange-200 text-xs font-bold uppercase rounded border border-amber-200 dark:border-orange-800 flex items-center gap-2">
-                <Tag size={14} />
-                P2: Viktig
-              </span>
-            )}
+            <div className="flex gap-2">
+              {isP1 && (
+                <span className="px-3 py-1 bg-red-100 dark:bg-red-900/50 text-[#DC2626] dark:text-red-200 text-xs font-bold uppercase rounded border border-red-200 dark:border-red-800 flex items-center gap-2">
+                  <AlertOctagon size={14} />
+                  P1
+                </span>
+              )}
+              {isP2 && (
+                <span className="px-3 py-1 bg-amber-100 dark:bg-orange-900/50 text-[#D97706] dark:text-orange-200 text-xs font-bold uppercase rounded border border-amber-200 dark:border-orange-800 flex items-center gap-2">
+                  <Tag size={14} />
+                  P2
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -442,19 +444,19 @@ const PointDetail: React.FC<PointDetailProps> = ({
 
                 {!showWarning ? (
                   <form onSubmit={handleRegisterValue} className="space-y-3">
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2 w-full">
                       <input 
                         type="text"
                         placeholder="Uppmätt värde (t.ex. 8,5)"
                         value={actualValueInput}
                         onChange={(e) => setActualValueInput(e.target.value)}
-                        className={`flex-1 px-4 py-2.5 rounded-lg font-mono font-bold text-base focus:outline-none focus:ring-2 focus:ring-blue-500 border ${
+                        className={`flex-1 min-w-0 px-4 py-2.5 rounded-lg font-mono font-bold text-base focus:outline-none focus:ring-2 focus:ring-blue-500 border ${
                           theme === 'dark' ? 'bg-gray-850 border-gray-700 text-white' : 'bg-white border-slate-200 text-[#0F172A]'
                         }`}
                       />
                       <button 
                         type="submit"
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-lg transition-colors"
+                        className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-lg transition-colors whitespace-nowrap shrink-0 sm:w-auto w-full"
                       >
                         Registrera
                       </button>

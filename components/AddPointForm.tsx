@@ -177,15 +177,15 @@ const AddPointForm: React.FC<AddPointFormProps> = ({
                 </div>
 
                 {/* Hierarkikoppling */}
-                <div className="space-y-4 p-4 bg-gray-900/40 dark:bg-black/30 rounded-2xl border border-gray-700/50 dark:border-gray-800">
-                  <div className="flex items-center gap-1.5 pb-2 border-b border-gray-700/30">
+                <div className={`space-y-4 p-4 rounded-2xl border ${theme === 'dark' ? 'bg-black/30 border-gray-800/80' : 'bg-slate-50 border-slate-200'}`}>
+                  <div className={`flex items-center gap-1.5 pb-2 border-b ${theme === 'dark' ? 'border-gray-750/50' : 'border-slate-200'}`}>
                     <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
-                    <span className="text-[11px] font-black uppercase text-gray-400 tracking-wider">Koppla till fabrikshierarki</span>
+                    <span className={`text-[11px] font-black uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-slate-600'}`}>Koppla till fabrikshierarki</span>
                   </div>
                   
                   {/* Linje */}
                   <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">1. Produktionslinje</label>
+                    <label className={`block text-[10px] font-black uppercase mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-slate-500'}`}>1. Produktionslinje</label>
                     <CustomSelect
                       value={selectedLineId}
                       onChange={(val) => {
@@ -203,7 +203,7 @@ const AddPointForm: React.FC<AddPointFormProps> = ({
 
                   {/* Maskin */}
                   <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">2. Maskinenhet</label>
+                    <label className={`block text-[10px] font-black uppercase mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-slate-500'}`}>2. Maskinenhet</label>
                     <CustomSelect
                       value={selectedMachineName}
                       onChange={(val) => {
@@ -218,7 +218,7 @@ const AddPointForm: React.FC<AddPointFormProps> = ({
 
                   {/* Sektion */}
                   <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase mb-1">3. Maskinsektion</label>
+                    <label className={`block text-[10px] font-black uppercase mb-1 ${theme === 'dark' ? 'text-gray-400' : 'text-slate-500'}`}>3. Maskinsektion</label>
                     <CustomSelect
                       value={formData.section || ''}
                       onChange={(val) => handleChange('section', val)}
@@ -231,7 +231,7 @@ const AddPointForm: React.FC<AddPointFormProps> = ({
               </div>
 
               <div className="space-y-4">
-                <h3 className={`text-green-400 font-bold uppercase text-xs tracking-widest border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'} pb-2`}>Värden</h3>
+                <h3 className={`${theme === 'dark' ? 'text-green-400' : 'text-green-600'} font-bold uppercase text-xs tracking-widest border-b ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'} pb-2`}>Värden</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] font-black text-gray-500 mb-1 uppercase">Målvärde *</label>
@@ -296,8 +296,8 @@ const AddPointForm: React.FC<AddPointFormProps> = ({
                 </button>
               </div>
 
-              <div className={`overflow-hidden border ${theme === 'dark' ? 'border-gray-700 bg-gray-900/40' : 'border-slate-200 bg-slate-50'} rounded-xl`}>
-                <table className="w-full text-left border-collapse">
+              <div className={`overflow-x-auto border ${theme === 'dark' ? 'border-gray-700 bg-gray-900/40' : 'border-slate-200 bg-slate-50'} rounded-xl`}>
+                <table className="w-full text-left border-collapse min-w-[550px]">
                   <thead>
                     <tr className={`border-b ${theme === 'dark' ? 'border-gray-700 bg-gray-900/80 text-gray-400' : 'border-slate-200 bg-slate-100 text-slate-500'} text-[10px] uppercase font-black tracking-widest`}>
                       <th className="py-2.5 px-4 w-5/12 text-[10px] uppercase font-bold text-gray-500">Förpackningsformat (Recept)</th>
@@ -313,9 +313,11 @@ const AddPointForm: React.FC<AddPointFormProps> = ({
                       
                       return (
                         <tr key={recipe} className="hover:bg-cyan-500/5 transition-colors animate-none">
-                          <td className={`py-3 px-4 font-bold text-sm ${rowText} flex items-center gap-2`}>
-                            <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full animate-pulse"></span>
-                            {recipe}
+                          <td className={`py-3 px-4 font-bold text-sm ${rowText}`}>
+                            <div className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 bg-cyan-500 rounded-full shrink-0"></span>
+                              <span>{recipe}</span>
+                            </div>
                           </td>
                           <td className="py-2 px-3">
                             <input
