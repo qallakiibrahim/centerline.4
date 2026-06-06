@@ -2,7 +2,8 @@ import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
   GoogleAuthProvider, 
-  signInWithRedirect, // ÄNDRAD: Använder redirect istället för popup
+  signInWithRedirect,
+  signInWithPopup,    // TILLAGD: Används i iframe-miljö för sandlådesafer inloggning
   getRedirectResult,  // TILLAGD: För att fånga upp resultatet efter redirect
   signOut, 
   User, 
@@ -177,36 +178,56 @@ export class FirebaseDatabaseService implements DatabaseService {
     }
   }
 
-  // FIXAD: Pluggable oauth använder nu Redirect istället för Popup för att slippa COOP-fel
+  // RELEASABLE OAUTH: Intelligent val mellan Popup och Redirect
+  // - I iframe-sandbox (som AI Studio Live Preview) MÅSTE popup användas för framgångsrik inloggning.
+  // - På din Vercel/produktion-sida används Redirect för att förebygga COOP-blockeringar.
   public async signInWithGoogle(): Promise<User | null> {
     const provider = new GoogleAuthProvider();
+    const isIframe = window.self !== window.top;
+    
+    if (isIframe) {
+      console.log("Detecting iframe environment. Defaulting to signInWithPopup for sandbox safety...");
+      try {
+        const result = await signInWithPopup(auth, provider);
+        return result.user;
+      } catch (error: any) {
+        console.error('Failed Google sign-in with popup in iframe:', error);
+        this.handleAuthError(error);
+        throw error;
+      }
+    }
+
     try {
+      console.log("Detecting standalone external window. Redirecting to Google OAuth flow...");
       await signInWithRedirect(auth, provider);
       return null; // Sidan kommer att redirectas, så vi returnerar null här. Resultatet fångas upp vid omladdning.
     } catch (error: any) {
-      console.error('Failed Google sign-in:', error);
-      
-      const errorCode = error?.code;
-      const hostname = window.location.hostname;
-      
-      if (errorCode === 'auth/unauthorized-domain' || (error?.message && error.message.includes('unauthorized-domain'))) {
-        alert(
-          `Domänen "${hostname}" är inte tillagd som auktoriserad domän i ditt Firebase-projekt!\n\n` +
-          `För att kunna logga in här behöver du:\n` +
-          `1. Gå till Firebase Console (https://console.firebase.google.com/)\n` +
-          `2. Välj ditt projekt "centerline-pro"\n` +
-          `3. Gå till Authentication -> Settings/Inställningar (Settings-fliken)\n` +
-          `4. Klicka på "Authorized domains" / "Auktoriserade domäner"\n` +
-          `5. Lägg till "${hostname}" till listan.\n\n` +
-          `När det är klart kommer inloggningen att fungera!`
-        );
-      } else {
-        alert(
-          `Inloggningen misslyckades:\n${error?.message || error}\n\n` +
-          `Säkerställ att din Firebase-konfiguration är korrekt (t.ex. i /firebase-applet-config.json) och att Authentication i Firebase Console har Google aktiverat.`
-        );
-      }
+      console.error('Failed Google sign-in with redirect:', error);
+      this.handleAuthError(error);
       throw error;
+    }
+  }
+
+  private handleAuthError(error: any) {
+    const errorCode = error?.code;
+    const hostname = window.location.hostname;
+    
+    if (errorCode === 'auth/unauthorized-domain' || (error?.message && error.message.includes('unauthorized-domain'))) {
+      alert(
+        `Domänen "${hostname}" är inte tillagd som auktoriserad domän i ditt Firebase-projekt!\n\n` +
+        `För att kunna logga in här behöver du:\n` +
+        `1. Gå till Firebase Console (https://console.firebase.google.com/)\n` +
+        `2. Välj ditt projekt "centerline-pro"\n` +
+        `3. Gå till Authentication -> Settings/Inställningar (Settings-fliken)\n` +
+        `4. Klicka på "Authorized domains" / "Auktoriserade domäner"\n` +
+        `5. Lägg till "${hostname}" till listan.\n\n` +
+        `När det är klart kommer inloggningen att fungera!`
+      );
+    } else {
+      alert(
+        `Inloggningen misslyckades:\n${error?.message || error}\n\n` +
+        `Säkerställ att din Firebase-konfiguration är korrekt (t.ex. i /firebase-applet-config.json) och att Authentication i Firebase Console har Google aktiverat.`
+      );
     }
   }
 

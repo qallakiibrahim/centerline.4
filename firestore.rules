@@ -7,7 +7,7 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Main App State syncer collection rules
+    // App State
     match /app_state/{documentId} {
       allow read: if isSignedIn() && isVerified();
       
@@ -15,88 +15,63 @@ service cloud.firestore {
         && isValidId(documentId)
         && isValidAppState(incoming())
         && (
-          // Super admins får ALLTID skriva ALT (Ibrahim eller registrerad super_admin)
+          // Super Admin får ALLTID skriva ALT
           isSuperAdmin()
-          // connection_test_placeholder får skrivas av alla för att testa uppkoppling
-          || (documentId == 'connection_test_placeholder')
-          // history can be written by anyone
-          || (documentId == 'history')
-          // user_roles kan BARA skrivas av super_admin
+          // history får skrivas av ALLA (Registrera mätvärden)
+          || documentId == 'history'
+          // connection_test får skrivas av alla
+          || documentId == 'connection_test_placeholder'
+          // user_roles får bara skrivas av Super Admin
           || (documentId == 'user_roles' && isSuperAdmin())
-          // other configs can be written by process engineer or higher
-          || (documentId != 'user_roles' && documentId != 'history' && isProcessEngineerOrHigher())
+          // Layout, definitions, recipes, hierarchy, backgrounds får skrivas av PE+
+          || (
+            (documentId == 'layout' || documentId == 'layouts' || documentId == 'definitions' 
+             || documentId == 'recipes' || documentId == 'hierarchy' || documentId == 'backgrounds')
+            && isProcessEngineerOrHigher()
+          )
+          // points får skrivas av PE+ (flytta punkter & ändra sektioner)
+          || (documentId == 'points' && isProcessEngineerOrHigher())
         );
       
-      allow delete: if false; // Deny state deletion entirely to prevent data loss
+      allow delete: if false;
     }
 
-    // Standalone Helper functions
     function isValidId(id) {
-      return id == 'points' 
-        || id == 'layout' 
-        || id == 'layouts' 
-        || id == 'definitions' 
-        || id == 'recipes' 
-        || id == 'hierarchy' 
-        || id == 'backgrounds' 
-        || id == 'history'
-        || id == 'user_roles'
-        || id == 'connection_test_placeholder';
+      return id == 'points' || id == 'layout' || id == 'layouts' || id == 'definitions' 
+        || id == 'recipes' || id == 'hierarchy' || id == 'backgrounds' || id == 'history'
+        || id == 'user_roles' || id == 'connection_test_placeholder';
     }
 
-    function incoming() {
-      return request.resource.data;
+    function incoming() { return request.resource.data; }
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return request.auth.token.email_verified == true; }
+    
+    function isIbrahim() {
+      return isSignedIn() && isVerified() && request.auth.token.keys().hasAll(['email']) && request.auth.token.email.lower() == 'qallakiibrahim@gmail.com';
     }
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isVerified() {
-      return request.auth.token.email_verified == true;
-    }
-
-    // Säkerställer att auth-token faktiskt har en e-post innan vi gör toLowerCase()
-    function hasEmail(email) {
-      return request.auth.token.keys().hasAll(['email']) && request.auth.token.email.toLowerCase() == email.toLowerCase();
-    }
-
-    // Hjälpfunktion för att hämta rollen på ett säkert sätt - med fallback om dokumentet inte finns
     function getUserRole() {
-      let emailKey = request.auth.token.email.toLowerCase();
-      // Använd exists() för att säkert kontrollera om dokumentet finns innan vi läser det
-      return exists(/databases/$(database)/documents/app_state/user_roles) 
-        ? get(/databases/$(database)/documents/app_state/user_roles).data.value[emailKey]
-        : null;
+      return (!isSignedIn() || !isVerified() || !request.auth.token.keys().hasAll(['email']))
+        ? null
+        : (!exists(/databases/$(database)/documents/app_state/user_roles)
+          ? null
+          : (request.auth.token.email.lower() in get(/databases/$(database)/documents/app_state/user_roles).data.value
+            ? get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.lower()]
+            : null));
     }
 
     function isSuperAdmin() {
-      return isSignedIn() && isVerified() && (
-        // Ibrahim är alltid super_admin
-        hasEmail('qallakiibrahim@gmail.com')
-        // Andra användare måste vara registrerade i user_roles
-        || getUserRole() == 'super_admin'
-      );
+      return isIbrahim() 
+        || (isSignedIn() && isVerified() && getUserRole() == 'super_admin');
     }
 
     function isProcessEngineerOrHigher() {
-      return isSignedIn() && isVerified() && (
-        hasEmail('qallakiibrahim@gmail.com')
-        || (
-          exists(/databases/$(database)/documents/app_state/user_roles)
-          && (
-            getUserRole() == 'super_admin'
-            || getUserRole() == 'line_leader'
-            || getUserRole() == 'process_engineer'
-          )
-        )
-      );
+      return isIbrahim()
+        || (isSignedIn() && isVerified() && (getUserRole() == 'super_admin' || getUserRole() == 'process_engineer' || getUserRole() == 'line_leader'));
     }
 
     function isValidAppState(data) {
-      return data.keys().hasAll(['key', 'value']) 
-        && data.key is string 
-        && data.value != null;
+      return data.keys().hasAll(['key', 'value']) && data.key is string && data.value != null;
     }
   }
 }
