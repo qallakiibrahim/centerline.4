@@ -47,7 +47,7 @@ service cloud.firestore {
     function isVerified() { return request.auth.token.email_verified == true; }
     
     function isIbrahim() {
-      return isSignedIn() && isVerified() && request.auth.token.keys().hasAll(['email']) && request.auth.token.email.lower() == 'qallakiibrahim@gmail.com';
+      return isSignedIn() && isVerified() && request.auth.token.keys().hasAll(['email']) && request.auth.token.email == 'qallakiibrahim@gmail.com';
     }
 
     function getUserRole() {
@@ -55,8 +55,8 @@ service cloud.firestore {
         ? null
         : (!exists(/databases/$(database)/documents/app_state/user_roles)
           ? null
-          : (request.auth.token.email.lower() in get(/databases/$(database)/documents/app_state/user_roles).data.value
-            ? get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.lower()]
+          : (request.auth.token.email in get(/databases/$(database)/documents/app_state/user_roles).data.value
+            ? get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email]
             : null));
     }
 

@@ -178,33 +178,44 @@ export class FirebaseDatabaseService implements DatabaseService {
     }
   }
 
-  // RELEASABLE OAUTH: Intelligent val mellan Popup och Redirect
-  // - I iframe-sandbox (som AI Studio Live Preview) MÅSTE popup användas för framgångsrik inloggning.
-  // - På din Vercel/produktion-sida används Redirect för att förebygga COOP-blockeringar.
+  // RELEASABLE OAUTH: Intelligent hybrid flow
+  // - Provar signInWithPopup först (så du slipper COOP/Authorized Domains-krångel i onödan)
+  // - Om popups är blockerade faller den tillbaka på signInWithRedirect
   public async signInWithGoogle(): Promise<User | null> {
     const provider = new GoogleAuthProvider();
-    const isIframe = window.self !== window.top;
-    
-    if (isIframe) {
-      console.log("Detecting iframe environment. Defaulting to signInWithPopup for sandbox safety...");
-      try {
-        const result = await signInWithPopup(auth, provider);
-        return result.user;
-      } catch (error: any) {
-        console.error('Failed Google sign-in with popup in iframe:', error);
+    provider.setCustomParameters({
+      prompt: 'select_account'
+    });
+
+    console.log("Attempting Google Sign-In with popup...");
+    try {
+      const result = await signInWithPopup(auth, provider);
+      return result.user;
+    } catch (error: any) {
+      const errorCode = error?.code;
+      console.warn("Google Sign-In with popup failed/blocked, checking fallback:", error);
+      
+      if (
+        errorCode === 'auth/popup-blocked' || 
+        errorCode === 'auth/cancelled-popup-request' ||
+        (error?.message && error.message.includes('popup'))
+      ) {
+        console.log("Popup blocked or failed. Redirecting to Google OAuth flow instead...");
+        try {
+          await signInWithRedirect(auth, provider);
+          return null; // Redirect pågår
+        } catch (redirectError: any) {
+          console.error("Google Sign-In with redirect fallback failed:", redirectError);
+          this.handleAuthError(redirectError);
+          throw redirectError;
+        }
+      } else if (errorCode === 'auth/popup-closed-by-user') {
+        console.log("User closed the popup.");
+        return null;
+      } else {
         this.handleAuthError(error);
         throw error;
       }
-    }
-
-    try {
-      console.log("Detecting standalone external window. Redirecting to Google OAuth flow...");
-      await signInWithRedirect(auth, provider);
-      return null; // Sidan kommer att redirectas, så vi returnerar null här. Resultatet fångas upp vid omladdning.
-    } catch (error: any) {
-      console.error('Failed Google sign-in with redirect:', error);
-      this.handleAuthError(error);
-      throw error;
     }
   }
 
