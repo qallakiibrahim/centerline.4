@@ -170,8 +170,34 @@ export class FirebaseDatabaseService implements DatabaseService {
     try {
       const result = await signInWithPopup(auth, provider);
       return result.user;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed Google sign-in:', error);
+      
+      const errorCode = error?.code;
+      const hostname = window.location.hostname;
+      
+      if (errorCode === 'auth/popup-closed-by-user') {
+        alert(
+          "Inloggningsfönstret stängdes innan inloggningen slutfördes.\n\n" +
+          "Vänligen klicka på 'Logga in' igen och välj ditt Google-konto i det pop-up fönster som öppnas."
+        );
+      } else if (errorCode === 'auth/unauthorized-domain' || (error?.message && error.message.includes('unauthorized-domain'))) {
+        alert(
+          `Domänen "${hostname}" är inte tillagd som auktoriserad domän i ditt Firebase-projekt!\n\n` +
+          `För att kunna logga in här behöver du:\n` +
+          `1. Gå till Firebase Console (https://console.firebase.google.com/)\n` +
+          `2. Välj ditt projekt "centerline-pro"\n` +
+          `3. Gå till Authentication -> Settings/Inställningar (Settings-fliken)\n` +
+          `4. Klicka på "Authorized domains" / "Auktoriserade domäner"\n` +
+          `5. Lägg till "${hostname}" till listan.\n\n` +
+          `När det är klart kommer inloggningen att fungera!`
+        );
+      } else {
+        alert(
+          `Inloggningen misslyckades:\n${error?.message || error}\n\n` +
+          `Säkerställ att din Firebase-konfiguration är korrekt (t.ex. i /firebase-applet-config.json) och att Authentication i Firebase Console har Google aktiverat.`
+        );
+      }
       throw error;
     }
   }

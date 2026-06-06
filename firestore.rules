@@ -57,23 +57,23 @@ service cloud.firestore {
 
     function isSuperAdmin() {
       return isSignedIn() && isVerified() && (
-        request.auth.token.email.toLowerCase() == 'qallakiibrahim@gmail.com'
+        request.auth.token.email.lower() == 'qallakiibrahim@gmail.com'
         || (
           exists(/databases/$(database)/documents/app_state/user_roles)
-          && get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.toLowerCase()] == 'super_admin'
+          && get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.lower()] == 'super_admin'
         )
       );
     }
 
     function isProcessEngineerOrHigher() {
       return isSignedIn() && isVerified() && (
-        request.auth.token.email.toLowerCase() == 'qallakiibrahim@gmail.com'
+        request.auth.token.email.lower() == 'qallakiibrahim@gmail.com'
         || (
           exists(/databases/$(database)/documents/app_state/user_roles)
           && (
-            get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.toLowerCase()] == 'super_admin'
-            || get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.toLowerCase()] == 'line_leader'
-            || get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.toLowerCase()] == 'process_engineer'
+            get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.lower()] == 'super_admin'
+            || get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.lower()] == 'line_leader'
+            || get(/databases/$(database)/documents/app_state/user_roles).data.value[request.auth.token.email.lower()] == 'process_engineer'
           )
         )
       );
