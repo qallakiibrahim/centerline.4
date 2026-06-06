@@ -1,5 +1,13 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, User, onAuthStateChanged } from 'firebase/auth';
+import { 
+  getAuth, 
+  GoogleAuthProvider, 
+  signInWithRedirect, // ÄNDRAD: Använder redirect istället för popup
+  getRedirectResult,  // TILLAGD: För att fånga upp resultatet efter redirect
+  signOut, 
+  User, 
+  onAuthStateChanged 
+} from 'firebase/auth';
 import { 
   getFirestore, 
   doc, 
@@ -49,7 +57,7 @@ export interface DatabaseService {
   saveState(key: string, value: any): Promise<void>;
   
   // Pluggable Authentication
-  signInWithGoogle(): Promise<User>;
+  signInWithGoogle(): Promise<User | null>; // ÄNDRAD: Kan returnera null initialt vid redirect
   logout(): Promise<void>;
   getCurrentUser(): User | null;
   onAuthChange(callback: (user: User | null) => void): () => void;
@@ -125,6 +133,11 @@ export class FirebaseDatabaseService implements DatabaseService {
     };
     testConnection();
 
+    // Fånga upp redirect-resultat om användaren precis kommit tillbaka från inloggningen
+    getRedirectResult(auth).catch((error) => {
+      console.error("Fel vid hantering av inloggnings-redirect:", error);
+    });
+
     // Authenticate changes
     const unsubscribe = onAuthStateChanged(auth, () => {
       this.isReady = true;
@@ -164,24 +177,19 @@ export class FirebaseDatabaseService implements DatabaseService {
     }
   }
 
-  // Pluggable oauth
-  public async signInWithGoogle(): Promise<User> {
+  // FIXAD: Pluggable oauth använder nu Redirect istället för Popup för att slippa COOP-fel
+  public async signInWithGoogle(): Promise<User | null> {
     const provider = new GoogleAuthProvider();
     try {
-      const result = await signInWithPopup(auth, provider);
-      return result.user;
+      await signInWithRedirect(auth, provider);
+      return null; // Sidan kommer att redirectas, så vi returnerar null här. Resultatet fångas upp vid omladdning.
     } catch (error: any) {
       console.error('Failed Google sign-in:', error);
       
       const errorCode = error?.code;
       const hostname = window.location.hostname;
       
-      if (errorCode === 'auth/popup-closed-by-user') {
-        alert(
-          "Inloggningsfönstret stängdes innan inloggningen slutfördes.\n\n" +
-          "Vänligen klicka på 'Logga in' igen och välj ditt Google-konto i det pop-up fönster som öppnas."
-        );
-      } else if (errorCode === 'auth/unauthorized-domain' || (error?.message && error.message.includes('unauthorized-domain'))) {
+      if (errorCode === 'auth/unauthorized-domain' || (error?.message && error.message.includes('unauthorized-domain'))) {
         alert(
           `Domänen "${hostname}" är inte tillagd som auktoriserad domän i ditt Firebase-projekt!\n\n` +
           `För att kunna logga in här behöver du:\n` +
