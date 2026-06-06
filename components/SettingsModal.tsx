@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Upload, Save, Image as ImageIcon, Link, Globe, CheckCircle2, Copy, Wifi, Info, Cloud, ShieldCheck, FileText, UserCheck, Calendar } from 'lucide-react';
+import { X, Upload, Save, Image as ImageIcon, Link, Globe, CheckCircle2, Copy, Wifi, Info, Cloud, ShieldCheck, FileText, UserCheck, Calendar, Edit3, LogIn, LogOut, Key } from 'lucide-react';
 import { DocumentMetadata } from '../types';
 
 interface SettingsModalProps {
@@ -10,9 +10,29 @@ interface SettingsModalProps {
   onSave: (settings: { mapUrl: string | null; logoUrl: string | null; publicUrl: string; metadata: DocumentMetadata }) => void;
   onClose: () => void;
   theme?: 'dark' | 'light';
+  isDesignMode?: boolean;
+  onToggleDesignMode?: () => void;
+  currentUser?: any;
+  onSignInWithGoogle?: () => void;
+  onLogout?: () => void;
+  dbStatus?: 'idle' | 'loading' | 'connected' | 'error';
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ currentMapUrl, currentLogoUrl, currentPublicUrl, currentMetadata, onSave, onClose, theme = 'dark' }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({ 
+  currentMapUrl, 
+  currentLogoUrl, 
+  currentPublicUrl, 
+  currentMetadata, 
+  onSave, 
+  onClose, 
+  theme = 'dark',
+  isDesignMode = false,
+  onToggleDesignMode,
+  currentUser,
+  onSignInWithGoogle,
+  onLogout,
+  dbStatus = 'idle'
+}) => {
   const [mapUrl, setMapUrl] = useState<string | null>(currentMapUrl);
   const [logoUrl, setLogoUrl] = useState<string | null>(currentLogoUrl);
   const [publicUrl, setPublicUrl] = useState<string>(currentPublicUrl);
@@ -71,6 +91,100 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ currentMapUrl, currentLog
         </div>
 
         <div className="p-8 space-y-10 overflow-y-auto">
+          
+          {/* BEHÖRIGHET OCH REDIGERINGSBERÄTTIGANDE */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pb-8 border-b border-gray-200 dark:border-gray-800">
+            {/* GOOGLE AUTENTISERINGSPANEL */}
+            <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'bg-black/40 border-gray-800' : 'bg-slate-50 border-slate-200'} space-y-4`}>
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-blue-500/10 text-blue-500 rounded-2xl">
+                  <Key size={20} />
+                </div>
+                <div>
+                  <h3 className={`text-md font-black uppercase tracking-wider ${theme === 'dark' ? 'text-white' : 'text-slate-950'}`}>
+                    Google Autentisering
+                  </h3>
+                  <span className="text-[10px] text-slate-400 dark:text-gray-500 font-mono font-bold uppercase tracking-wider block">
+                    Kopplat till drift-databas
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2 text-xs">
+                {currentUser ? (
+                  <div className="space-y-4">
+                    <div className={`p-4 rounded-2xl border ${theme === 'dark' ? 'bg-emerald-500/[0.04] border-emerald-900/30 text-emerald-400' : 'bg-green-50 border-green-200 text-green-800'}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+                        <span className="font-extrabold uppercase tracking-wide text-[10px]">Inloggad som</span>
+                      </div>
+                      <p className="font-mono font-bold break-all">{currentUser.displayName || currentUser.email}</p>
+                      <p className="text-[10px] opacity-80 mt-1">Automatisk realtidsdatabas-synkronisering aktiv.</p>
+                    </div>
+
+                    <button
+                      onClick={onLogout}
+                      className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded-xl font-bold font-mono uppercase tracking-wider text-xs transition-all active:scale-95 cursor-pointer border border-red-500/20"
+                    >
+                      <LogOut size={14} />
+                      Logga ut från Google
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <p className={`${theme === 'dark' ? 'text-gray-400' : 'text-slate-600'} leading-relaxed text-[11px]`}>
+                      Eftersom databasen är skyddad krävs det inloggning med Google-konto för att spara eller synka mätvärden och inställningar till molnet. Utan inloggning sparas data enbart lokalt på denna enhet.
+                    </p>
+
+                    <button
+                      onClick={onSignInWithGoogle}
+                      className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-black uppercase tracking-wider text-xs shadow-lg active:scale-95 transition-all cursor-pointer"
+                    >
+                      <LogIn size={14} />
+                      Koppla och logga in med Google
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* REDIGERINGS-TOGGLE MODUL */}
+            <div className={`p-6 rounded-3xl border ${theme === 'dark' ? 'bg-black/40 border-gray-800' : 'bg-slate-50 border-slate-200'} space-y-4 flex flex-col justify-between`}>
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-500/10 text-amber-500 rounded-2xl">
+                    <Edit3 size={20} />
+                  </div>
+                  <div>
+                    <h3 className={`text-md font-black uppercase tracking-wider ${theme === 'dark' ? 'text-white' : 'text-slate-950'}`}>
+                      Redigeringsläge (Layout)
+                    </h3>
+                    <span className="text-[10px] text-slate-400 dark:text-gray-500 font-mono font-bold uppercase tracking-wider block">
+                      Konfigurera maskinöversikt
+                    </span>
+                  </div>
+                </div>
+
+                <p className={`${theme === 'dark' ? 'text-gray-400' : 'text-slate-600'} leading-relaxed text-[11px]`}>
+                  Aktivera redigeringsläget för att flytta mätpunkter på ritningen, ändra sektioners storlek och hantera CL-program. Det går utmärkt att köra på både mobil, surfplatta och dator!
+                </p>
+              </div>
+
+              <div className="pt-4">
+                <button
+                  onClick={onToggleDesignMode}
+                  className={`w-full flex items-center justify-center gap-2.5 py-3.5 px-4 rounded-xl font-black uppercase tracking-wider text-xs transition-all active:scale-[0.98] cursor-pointer shadow-md ${
+                    isDesignMode
+                      ? 'bg-amber-600 hover:bg-amber-500 text-black font-black font-sans'
+                      : (theme === 'dark' ? 'bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700' : 'bg-white hover:bg-gray-100 text-slate-700 border border-slate-200')
+                  }`}
+                >
+                  <Edit3 size={15} />
+                  <span>{isDesignMode ? 'Aktivt (Klicka för att LÅSA)' : 'Aktivera Redigeraläge'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
           
           {/* STEP 1: NETWORK STATUS */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">

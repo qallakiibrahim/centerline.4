@@ -1157,6 +1157,22 @@ const App: React.FC = () => {
               <h1 className={`text-3xl font-black uppercase italic tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-[#0F172A]'} print:text-4xl`}>{translations.sv.headerTitle}</h1>
               <p className="text-gray-500 text-[10px] font-black uppercase tracking-[0.3em] mt-1 italic">{translations.sv.headerSubtitle}</p>
             </div>
+
+            {/* Mobile Layout Edit Switch */}
+            <div className="md:hidden self-center">
+              <button
+                onClick={() => { setIsDesignMode(!isDesignMode); setSelectedPoint(null); }}
+                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[10px] font-slate uppercase font-black tracking-wider transition-all shadow-md cursor-pointer ${
+                  isDesignMode
+                    ? 'bg-amber-600 hover:bg-amber-500 text-black font-sans'
+                    : (theme === 'dark' ? 'bg-[#1E293B] hover:bg-[#334155] text-gray-350 border border-gray-800' : 'bg-[#F1F5F9] hover:bg-[#E2E8F0] text-slate-755 border border-slate-200')
+                }`}
+                title={isDesignMode ? "Lås layout" : "Redigera layout (Flytta punkter)"}
+              >
+                <Edit3 size={12} />
+                <span>{isDesignMode ? 'LÅS' : 'REDIGERA'}</span>
+              </button>
+            </div>
             
             <div className="hidden print:block text-right">
               <p className="text-sm font-black uppercase tracking-widest">{currentPrintDate}</p>
@@ -1483,12 +1499,21 @@ const App: React.FC = () => {
           theme={theme}
         />
       )}
-      {isSettingsOpen && (
+       {isSettingsOpen && (
         <SettingsModal 
           currentMapUrl={activeMapUrl} 
           currentLogoUrl={logoUrl}
           currentPublicUrl={publicBaseUrl}
           currentMetadata={docMetadata}
+          isDesignMode={isDesignMode}
+          onToggleDesignMode={() => {
+            setIsDesignMode(!isDesignMode);
+            setSelectedPoint(null);
+          }}
+          currentUser={currentUser}
+          onSignInWithGoogle={() => dbService.signInWithGoogle()}
+          onLogout={() => dbService.logout()}
+          dbStatus={dbStatus}
           onSave={(s) => { 
             // Save machine-specific background
             setMachineBackgrounds(prev => {
