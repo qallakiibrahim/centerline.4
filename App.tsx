@@ -86,6 +86,14 @@ const App: React.FC = () => {
   });
 
   const [points, setPoints] = useState<MachinePoint[]>([]);
+  const [userRoles, setUserRoles] = useState<Record<string, string>>(() => {
+    try {
+      const saved = localStorage.getItem('offline_app_state_user_roles');
+      return saved ? JSON.parse(saved) : { 'qallakiibrahim@gmail.com': 'super_admin' };
+    } catch (e) {
+      return { 'qallakiibrahim@gmail.com': 'super_admin' };
+    }
+  });
   const [layouts, setLayouts] = useState<Record<string, MachineModule[]>>({
     'Packmaskin (Tray Packer - Pilot)': DEFAULT_MACHINE_LAYOUT
   });
@@ -118,6 +126,34 @@ const App: React.FC = () => {
   const lastSyncedHierarchy = React.useRef<string>('');
   const lastSyncedBackgrounds = React.useRef<string>('');
   const lastSyncedHistory = React.useRef<string>('[]');
+  const lastSyncedUserRoles = React.useRef<string>('');
+
+  // Derive user specific role and authority checks
+  const currentUserEmail = currentUser?.email?.toLowerCase().trim() || '';
+  const isHardcodedAdmin = currentUserEmail === 'qallakiibrahim@gmail.com';
+  const currentUserRole = isHardcodedAdmin
+    ? 'super_admin'
+    : (userRoles[currentUserEmail] || 'operator');
+
+  const canEditLayout = currentUserRole === 'process_engineer' || currentUserRole === 'line_leader' || currentUserRole === 'super_admin';
+  const canApprove = currentUserRole === 'line_leader' || currentUserRole === 'super_admin';
+  const canManageUsers = currentUserRole === 'super_admin';
+
+  // Synchronise or switch off design mode if user is no longer permitted
+  useEffect(() => {
+    if (isDesignMode && !canEditLayout) {
+      setIsDesignMode(false);
+    }
+  }, [currentUser, userRoles, isDesignMode, canEditLayout]);
+
+  const handleToggleDesignMode = useCallback(() => {
+    if (!isDesignMode && !canEditLayout) {
+      alert("Behörighet saknas. Endast Processingenjör, Linjeledare (Line Leader) eller Super Admin kan redigera layouten.");
+      return;
+    }
+    setIsDesignMode(prev => !prev);
+    setSelectedPoint(null);
+  }, [isDesignMode, canEditLayout]);
 
   // Dynamically resolve active machine CL-programs/recipes
   const activeMachineRecipes = React.useMemo(() => {
@@ -222,6 +258,13 @@ const App: React.FC = () => {
 
       setPointHistory(getLocalBackup('history', []));
       
+      const localUserRoles = getLocalBackup('user_roles', null);
+      if (localUserRoles) {
+        setUserRoles(localUserRoles);
+      } else {
+        setUserRoles({ 'qallakiibrahim@gmail.com': 'super_admin' });
+      }
+      
       setDbStatus('idle');
       setIsLoading(false);
       setTimeout(() => {
@@ -241,6 +284,7 @@ const App: React.FC = () => {
         const hierarchyData = cloudData['hierarchy'];
         const backgroundsData = cloudData['backgrounds'];
         const historyData = cloudData['history'];
+        const userRolesData = cloudData['user_roles'];
         
         if (backgroundsData) {
           setMachineBackgrounds(backgroundsData);
@@ -253,6 +297,14 @@ const App: React.FC = () => {
         } else {
           setPointHistory([]);
           lastSyncedHistory.current = JSON.stringify([]);
+        }
+
+        if (userRolesData) {
+          setUserRoles(userRolesData);
+          lastSyncedUserRoles.current = JSON.stringify(userRolesData);
+        } else {
+          setUserRoles({ 'qallakiibrahim@gmail.com': 'super_admin' });
+          lastSyncedUserRoles.current = JSON.stringify({ 'qallakiibrahim@gmail.com': 'super_admin' });
         }
         
         if (pointsData) {
@@ -382,7 +434,7 @@ const App: React.FC = () => {
   }, [docMetadata]);
 
   // Generic sync function using Pluggable DB Service
-  const performSync = async (key: 'points' | 'layout' | 'definitions' | 'recipes' | 'hierarchy' | 'backgrounds' | 'history', value: any) => {
+  const performSync = async (key: 'points' | 'layout' | 'definitions' | 'recipes' | 'hierarchy' | 'backgrounds' | 'history' | 'user_roles', value: any) => {
     if (isInitialLoad.current) return;
 
     // Always back up locally in localStorage so work is never lost
@@ -397,6 +449,7 @@ const App: React.FC = () => {
     if (key === 'hierarchy' && currentJson === lastSyncedHierarchy.current) return;
     if (key === 'backgrounds' && currentJson === lastSyncedBackgrounds.current) return;
     if (key === 'history' && currentJson === lastSyncedHistory.current) return;
+    if (key === 'user_roles' && currentJson === lastSyncedUserRoles.current) return;
 
     setSaveStatus('saving');
 
@@ -414,10 +467,11 @@ const App: React.FC = () => {
         if (key === 'hierarchy') lastSyncedHierarchy.current = currentJson;
         if (key === 'backgrounds') lastSyncedBackgrounds.current = currentJson;
         if (key === 'history') lastSyncedHistory.current = currentJson;
+        if (key === 'user_roles') lastSyncedUserRoles.current = currentJson;
 
         setSaveStatus('success');
         setHasUnsavedChanges(false);
-        setTimeout(() => setSaveStatus('idle'), 2000);
+        setTimeout(() => setSaveStatus('idle'), 2050);
       }, 300);
       return;
     }
@@ -433,6 +487,7 @@ const App: React.FC = () => {
       if (key === 'hierarchy') lastSyncedHierarchy.current = currentJson;
       if (key === 'backgrounds') lastSyncedBackgrounds.current = currentJson;
       if (key === 'history') lastSyncedHistory.current = currentJson;
+      if (key === 'user_roles') lastSyncedUserRoles.current = currentJson;
 
       setSaveStatus('success');
       setHasUnsavedChanges(false);
@@ -478,6 +533,13 @@ const App: React.FC = () => {
     const timer = setTimeout(() => performSync('hierarchy', { lines, machines, sections }), 2000);
     return () => clearTimeout(timer);
   }, [lines, machines, sections]);
+
+  useEffect(() => {
+    if (isInitialLoad.current) return;
+    setHasUnsavedChanges(true);
+    const timer = setTimeout(() => performSync('user_roles', userRoles), 2000);
+    return () => clearTimeout(timer);
+  }, [userRoles]);
 
   useEffect(() => {
     if (isInitialLoad.current) return;
@@ -986,7 +1048,7 @@ const App: React.FC = () => {
             
             <div className={`pt-4 mt-4 border-t ${theme === 'dark' ? 'border-gray-900' : 'border-[#E2E8F0]'} space-y-2`}>
               <button 
-                onClick={() => { setIsDesignMode(!isDesignMode); setSelectedPoint(null); }}
+                onClick={handleToggleDesignMode}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isDesignMode ? 'bg-amber-600 text-black shadow-lg' : (theme === 'dark' ? 'text-gray-500 hover:bg-gray-900' : 'text-slate-500 hover:bg-slate-100')}`}
               >
                 <Edit3 size={20} className="shrink-0" />
@@ -1161,7 +1223,7 @@ const App: React.FC = () => {
             {/* Mobile Layout Edit Switch */}
             <div className="md:hidden self-center">
               <button
-                onClick={() => { setIsDesignMode(!isDesignMode); setSelectedPoint(null); }}
+                onClick={handleToggleDesignMode}
                 className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[10px] font-slate uppercase font-black tracking-wider transition-all shadow-md cursor-pointer ${
                   isDesignMode
                     ? 'bg-amber-600 hover:bg-amber-500 text-black font-sans'
@@ -1507,6 +1569,10 @@ const App: React.FC = () => {
           currentMetadata={docMetadata}
           isDesignMode={isDesignMode}
           onToggleDesignMode={() => {
+            if (!canEditLayout) {
+              alert("Behörighet saknas. Endast Processingenjör, Linjeledare (Line Leader) eller Super Admin kan redigera layouten.");
+              return;
+            }
             setIsDesignMode(!isDesignMode);
             setSelectedPoint(null);
           }}
@@ -1514,6 +1580,8 @@ const App: React.FC = () => {
           onSignInWithGoogle={() => dbService.signInWithGoogle()}
           onLogout={() => dbService.logout()}
           dbStatus={dbStatus}
+          userRoles={userRoles}
+          onUpdateUserRoles={setUserRoles}
           onSave={(s) => { 
             // Save machine-specific background
             setMachineBackgrounds(prev => {
