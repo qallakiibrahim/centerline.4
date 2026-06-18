@@ -15,8 +15,9 @@ import ModuleEditor from './components/ModuleEditor';
 import Guide from './components/Guide';
 import CustomSelect from './components/CustomSelect';
 import HistoryView from './components/HistoryView';
-import { Map, List, Settings, Activity, Printer, ChevronLeft, ChevronRight, Plus, Edit3, BookOpen, Square, Crosshair, Image as ImageIcon, Sun, Moon, X, History } from 'lucide-react';
+import { Map, List, Settings, Activity, Printer, ChevronLeft, ChevronRight, Plus, Edit3, BookOpen, Square, Crosshair, Image as ImageIcon, Sun, Moon, X, History, BarChart3 } from 'lucide-react';
 import { dbService } from './dbService';
+import { DashboardView } from './components/DashboardView';
 
 // Factory structure data for cascading dropdowns
 const FACTORY_LINES = [
@@ -51,7 +52,7 @@ const MACHINE_SECTIONS: Record<string, string[]> = {
 };
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'table' | 'phasing' | 'guide' | 'history'>('overview');
+  const [activeTab, setActiveTab ] = useState<'overview' | 'table' | 'phasing' | 'guide' | 'history' | 'dashboard'>('overview');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     if (typeof window !== 'undefined') {
@@ -1032,6 +1033,7 @@ const App: React.FC = () => {
           <nav className="p-3 space-y-2 mt-4">
             {[
               { id: 'overview', icon: Map, label: 'Karta' },
+              { id: 'dashboard', icon: BarChart3, label: 'Dashboard' },
               { id: 'phasing', icon: Activity, label: 'Synk' },
               { id: 'history', icon: History, label: 'Historik' },
               { id: 'guide', icon: BookOpen, label: 'Guide' }
@@ -1070,6 +1072,7 @@ const App: React.FC = () => {
         <nav className="flex md:hidden w-full justify-around items-center h-full px-1 overflow-x-auto no-scrollbar">
             {[
               { id: 'overview', icon: Map, label: 'Karta' },
+              { id: 'dashboard', icon: BarChart3, label: 'Dash' },
               { id: 'phasing', icon: Activity, label: 'Synk' },
               { id: 'history', icon: History, label: 'Historik' },
               { id: 'guide', icon: BookOpen, label: 'Guide' }
@@ -1461,6 +1464,22 @@ const App: React.FC = () => {
             {/* Skärm-specifika flikar */}
             <div className="print:hidden">
               {activeTab === 'phasing' && <PhasingGauge currentDegree={0} points={points} theme={theme} />}
+              {activeTab === 'dashboard' && (
+                <DashboardView 
+                  points={points.filter(p => {
+                    const matchesLine = !p.lineId || p.lineId === selectedLine;
+                    const matchesMachine = !p.machine || p.machine === selectedMachine || 
+                      (selectedMachine === 'Packmaskin (Tray Packer - Pilot)' && !p.machine);
+                    return matchesLine && matchesMachine;
+                  })}
+                  pointHistory={pointHistory}
+                  sections={sections[selectedMachine] || []}
+                  theme={theme}
+                  selectedLineName={lines.find(l => l.id === selectedLine)?.name || selectedLine}
+                  selectedMachineName={selectedMachine}
+                  activeRecipe={activeRecipe}
+                />
+              )}
               {activeTab === 'history' && (
                 <HistoryView 
                   points={points.filter(p => {
