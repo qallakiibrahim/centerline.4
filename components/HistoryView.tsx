@@ -450,7 +450,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({
                     </div>
 
                     {/* Timeline Trace */}
-                    <div className="md:col-span-9 overflow-x-auto flex gap-2 py-1 scroll-smooth no-scrollbar">
+                    <div className="md:col-span-9 overflow-x-auto flex gap-2 pb-3 pt-1.5 scroll-smooth">
                       {logsForThisPoint.length > 0 ? (
                         logsForThisPoint.map((log) => {
                           const isOK = log.status === PointStatus.OK;

@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { MachinePoint, Criticality, PointStatus, PointHistoryLog } from '../types';
 import { AlertTriangle, Video, AlertOctagon, PenBox, Zap, Tag, CheckCircle2, ChevronRight, Activity, Calendar, Clock, MessageSquare, ExternalLink, Info } from 'lucide-react';
+import { 
+  ResponsiveContainer, 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  Tooltip, 
+  ReferenceLine 
+} from 'recharts';
 
 interface PointDetailProps {
   point: MachinePoint;
@@ -99,6 +108,15 @@ const PointDetail: React.FC<PointDetailProps> = ({
   const isP2 = point.criticality === Criticality.P2;
 
   // Filter history for this specific point
+  const getDisplayValue = (valStr: string | undefined | null) => {
+    if (!valStr) return '';
+    const str = valStr.toString();
+    if (str.includes('=')) {
+      return str.split('=').pop()?.trim() || str;
+    }
+    return str;
+  };
+
   const historyForPoint = (pointHistory || [])
     .filter(h => h.pointId === point.id)
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -113,6 +131,50 @@ const PointDetail: React.FC<PointDetailProps> = ({
       return parseFloat(matches[matches.length - 1]);
     }
     return null;
+  };
+
+  const getTolerancesForDetail = (targetStr: string, tolStr: string) => {
+    const target = extractNumericValue(targetStr);
+    if (target === null) return { target: null, min: null, max: null };
+
+    // Parse tolerance e.g. "±0.5" or "+-0.5" or "+/-0.5"
+    if (tolStr.includes('±') || tolStr.toLowerCase().includes('+-') || tolStr.toLowerCase().includes('+/-')) {
+      const match = tolStr.replace(',', '.').match(/[0-9]+(?:\.[0-9]+)?/);
+      if (match) {
+        const tol = parseFloat(match[0]);
+        return {
+          target,
+          min: target - tol,
+          max: target + tol
+        };
+      }
+    }
+
+    // Range e.g. "8.0 - 10.0"
+    const rangeMatch = tolStr.replace(',', '.').match(/([0-9]+(?:\.[0-9]+)?)\s*[-–]\s*([0-9]+(?:\.[0-9]+)?)/);
+    if (rangeMatch) {
+      const min = parseFloat(rangeMatch[1]);
+      const max = parseFloat(rangeMatch[2]);
+      return {
+        target,
+        min,
+        max
+      };
+    }
+
+    // Simple numeric
+    const parsedTol = extractNumericValue(tolStr);
+    if (parsedTol !== null) {
+      const min = target - parsedTol;
+      const max = target + parsedTol;
+      return {
+        target,
+        min,
+        max
+      };
+    }
+
+    return { target, min: null, max: null };
   };
 
   // Tolerance check function
@@ -538,153 +600,207 @@ const PointDetail: React.FC<PointDetailProps> = ({
                     Historik & Trend för denna punkt (Optimering)
                   </h3>
                 </div>
-                <span className="text-[10px] font-bold text-slate-500">{historyForPoint.length} registreringar</span>
+                <span className="text-[10px] font-bold text-slate-500">{historyForPoint.length} mätningar</span>
               </div>
 
               {historyForPoint.length > 0 ? (
-                <div className="space-y-4">
-                  {/* Visuell trendkurva (Mini SVG Sparkline) */}
-                  <div className={`h-24 ${theme === 'dark' ? 'bg-gray-900/60 border-gray-700' : 'bg-slate-50 border-slate-200'} border rounded-2xl p-4 flex flex-col justify-between relative overflow-hidden shadow-inner`}>
-                    <div className="absolute top-2 left-3 flex gap-2 text-[9px] font-bold text-slate-400">
-                      <span>Målvärde: <strong>{targetValue}</strong></span>
-                      <span>&bull;</span>
-                      <span>Tolerans: <strong>{tolerance}</strong></span>
-                    </div>
+                (() => {
+                  const chartLogs = [...historyForPoint].reverse();
+                  const parsedTolerance = getTolerancesForDetail(targetValue, tolerance);
+                  const targetNum = parsedTolerance.target;
+                  const minLimit = parsedTolerance.min;
+                  const maxLimit = parsedTolerance.max;
 
-                    {/* SVG Sparkline */}
-                    <div className="flex-1 relative flex items-center justify-center pt-4">
-                      <svg className="w-full h-12 overflow-visible" xmlns="http://www.w3.org/2000/svg">
-                        {(() => {
-                          const pointsToDraw = [...historyForPoint].reverse();
-                          const numbers = pointsToDraw.map(p => parseFloat(p.value.replace(',', '.'))).filter(n => !isNaN(n));
-                          if (numbers.length === 0) return null;
-
-                          const targetNum = parseFloat(targetValue.replace(',', '.'));
-                          const allNums = [...numbers, isNaN(targetNum) ? numbers[0] : targetNum];
-
-                          const max = Math.max(...allNums);
-                          const min = Math.min(...allNums);
-                          const range = max - min === 0 ? 1 : max - min;
-
-                          // Helper coordinates mapping
-                          const pointsString = numbers.map((val, idx) => {
-                            const x = (idx / Math.max(1, numbers.length - 1)) * 100; // percent
-                            const y = 100 - ((val - min) / range) * 100; // percent
-                            return `${x}%,${y}%`;
-                          });
-
-                          // Map target value line
-                          const targetY = isNaN(targetNum) ? 50 : (100 - ((targetNum - min) / range) * 100);
-
-                          return (
-                            <>
-                              {/* Standard boundary guideline */}
-                              <line 
-                                x1="0%" 
-                                y1={`${targetY}%`} 
-                                x2="100%" 
-                                y2={`${targetY}%`} 
-                                stroke="#10B981" 
-                                strokeWidth="1" 
-                                strokeDasharray="3 3" 
-                                opacity="0.4"
-                              />
-
-                              {/* Connectors */}
-                              <polyline
-                                fill="none"
-                                stroke="#3B82F6"
-                                strokeWidth="2.5"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                points={numbers.map((val, idx) => {
-                                  // convert percent string layout to real coordinates dynamically
-                                  const xPct = (idx / Math.max(1, numbers.length - 1)) * 98 + 1;
-                                  const yPct = 100 - ((val - min) / range) * 80 - 10;
-                                  return `${xPct} ${yPct}`;
-                                }).join(', ')}
-                              />
-
-                              {/* Interactive dot nodes */}
-                              {numbers.map((val, idx) => {
-                                const xPct = (idx / Math.max(1, numbers.length - 1)) * 98 + 1;
-                                const yPct = 100 - ((val - min) / range) * 80 - 10;
-                                const logEntry = pointsToDraw[idx];
-                                const isOK = logEntry.status === PointStatus.OK;
-                                return (
-                                  <g key={idx}>
-                                    <circle
-                                      cx={`${xPct}%`}
-                                      cy={`${yPct}%`}
-                                      r="4"
-                                      fill={isOK ? '#10B981' : '#EF4444'}
-                                      stroke={theme === 'dark' ? '#1F2937' : '#FFFFFF'}
-                                      strokeWidth="1.5"
-                                    />
-                                  </g>
-                                );
-                              })}
-                            </>
-                          );
-                        })()}
-                      </svg>
-                    </div>
-
-                    <div className="flex justify-between text-[8px] font-black uppercase text-slate-500 tracking-wider">
-                      <span>Dåtid &larr;</span>
-                      <span>Senaste mätning &rarr;</span>
-                    </div>
-                  </div>
-
-                  {/* HORIZONTAL TIMELINE ROW */}
-                  <div className="overflow-x-auto pb-2 flex gap-3 no-scrollbar scroll-smooth">
-                    {historyForPoint.map((log) => {
-                      const isOK = log.status === PointStatus.OK;
+                  const chartData = chartLogs
+                    .map((log) => {
+                      const val = extractNumericValue(log.value);
+                      if (val === null) return null;
+                      
                       const dateObj = new Date(log.timestamp);
-                      const formattedDate = dateObj.toLocaleDateString('sv-SE', { month: 'short', day: 'numeric' });
-                      const formattedTime = dateObj.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+                      const dateStr = dateObj.toLocaleDateString('sv-SE', { month: 'numeric', day: 'numeric' }) + 
+                        ' ' + dateObj.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
 
-                      return (
-                        <div 
-                          key={log.id} 
-                          className={`min-w-[180px] p-3 rounded-xl border flex flex-col justify-between shrink-0 ${
-                            isOK 
-                              ? (theme === 'dark' ? 'bg-green-950/20 border-green-500/20' : 'bg-green-50/50 border-green-200') 
-                              : (theme === 'dark' ? 'bg-red-950/20 border-red-500/20' : 'bg-red-50/50 border-red-200')
-                          }`}
-                        >
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1">
-                              <Calendar size={10} /> {formattedDate}
-                              <Clock size={10} /> {formattedTime}
-                            </span>
-                            <span className={`text-[8px] font-black px-1.5 py-0.5 rounded ${
-                              isOK ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
-                            }`}>
-                              {isOK ? 'OK' : 'TAGG'}
-                            </span>
-                          </div>
+                      return {
+                        timestamp: log.timestamp,
+                        date: dateStr,
+                        value: val,
+                        target: targetNum ?? undefined,
+                        minLimit: minLimit ?? undefined,
+                        maxLimit: maxLimit ?? undefined,
+                        status: log.status
+                      };
+                    })
+                    .filter((d): d is NonNullable<typeof d> => d !== null);
 
-                          <div className="flex items-baseline gap-1.5 mt-1">
-                            <span className={`text-lg font-black font-mono ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>
-                              {log.value}
-                            </span>
-                            <span className="text-[10px] text-slate-500">
-                              (Target: {log.targetValue})
-                            </span>
-                          </div>
+                  return (
+                    <div className="space-y-4">
+                      {/* Visuell trendkurva (Recharts chart) */}
+                      <div className={`h-56 ${theme === 'dark' ? 'bg-gray-1000/60 border-gray-750' : 'bg-slate-50 border-slate-200'} border rounded-2xl p-4 flex flex-col justify-between relative overflow-hidden shadow-inner`}>
+                        <div className="absolute top-2 left-3 flex gap-2 text-[10px] font-semibold text-slate-400 z-10">
+                          <span>Målvärde: <strong className={theme === 'dark' ? 'text-white' : 'text-slate-700'}>{targetValue}</strong></span>
+                          <span>&bull;</span>
+                          <span>Tolerans: <strong className={theme === 'dark' ? 'text-white' : 'text-slate-700'}>{tolerance}</strong></span>
+                        </div>
 
-                          {log.comment && (
-                            <div className="mt-2 text-[9px] text-slate-500 italic bg-black/10 dark:bg-black/20 p-1.5 rounded flex items-start gap-1">
-                              <MessageSquare size={10} className="shrink-0 mt-0.5 text-blue-500" />
-                              <span className="line-clamp-2">{log.comment}</span>
+                        <div className="flex-1 w-full pt-4">
+                          {chartData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={chartData} margin={{ top: 15, right: 10, bottom: 0, left: -25 }}>
+                                <XAxis 
+                                  dataKey="date" 
+                                  tick={{ fontSize: 8, fill: theme === 'dark' ? '#94A3B8' : '#64748B' }} 
+                                  tickLine={false}
+                                  axisLine={false}
+                                />
+                                <YAxis 
+                                  domain={[
+                                    (dataMin: number) => {
+                                      const floor = Math.min(dataMin, minLimit ?? dataMin, targetNum ?? dataMin);
+                                      return Math.floor(floor - Math.max(1, Math.abs(floor * 0.05)));
+                                    },
+                                    (dataMax: number) => {
+                                      const cap = Math.max(dataMax, maxLimit ?? dataMax, targetNum ?? dataMax);
+                                      return Math.ceil(cap + Math.max(1, Math.abs(cap * 0.05)));
+                                    }
+                                  ]}
+                                  tick={{ fontSize: 8, fill: theme === 'dark' ? '#94A3B8' : '#64748B' }}
+                                  tickLine={false}
+                                  axisLine={false}
+                                />
+                                <Tooltip
+                                  contentStyle={{
+                                    background: theme === 'dark' ? '#1E293B' : '#FFFFFF',
+                                    borderColor: theme === 'dark' ? '#334155' : '#E2E8F0',
+                                    borderRadius: '8px',
+                                    fontSize: '10px',
+                                    color: theme === 'dark' ? '#F8FAFC' : '#0F172A',
+                                    fontFamily: 'monospace'
+                                  }}
+                                  formatter={(value: any) => [`${value}`, 'Mätvärde']}
+                                />
+                                
+                                {targetNum !== null && (
+                                  <ReferenceLine 
+                                    y={targetNum} 
+                                    stroke="#10B981" 
+                                    strokeWidth={1.5}
+                                    strokeDasharray="4 3" 
+                                    opacity={0.8}
+                                  />
+                                )}
+
+                                {minLimit !== null && (
+                                  <ReferenceLine 
+                                    y={minLimit} 
+                                    stroke="#EF4444" 
+                                    strokeWidth={1}
+                                    strokeDasharray="3 3" 
+                                    opacity={0.6}
+                                  />
+                                )}
+
+                                {maxLimit !== null && (
+                                  <ReferenceLine 
+                                    y={maxLimit} 
+                                    stroke="#EF4444" 
+                                    strokeWidth={1}
+                                    strokeDasharray="3 3" 
+                                    opacity={0.6}
+                                  />
+                                )}
+
+                                <Line 
+                                  type="monotone" 
+                                  dataKey="value" 
+                                  stroke="#3B82F6" 
+                                  strokeWidth={2.5}
+                                  dot={(props: any) => {
+                                    const { cx, cy, payload } = props;
+                                    const isOK = payload.status === PointStatus.OK;
+                                    return (
+                                      <circle 
+                                        cx={cx} 
+                                        cy={cy} 
+                                        r={4.5} 
+                                        fill={isOK ? '#10B981' : '#EF4444'} 
+                                        stroke={theme === 'dark' ? '#0F172A' : '#FFFFFF'} 
+                                        strokeWidth={1.5} 
+                                      />
+                                    );
+                                  }}
+                                  activeDot={{ r: 6 }} 
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          ) : (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center space-y-1 text-slate-400 dark:text-slate-600 text-center p-4">
+                              <Activity size={24} className="stroke-1 animate-pulse" />
+                              <span className="text-[10px] font-bold uppercase tracking-wider">Mätvärden saknar numeriska siffror</span>
+                              <span className="text-[9px] font-mono leading-normal px-2">Trendgrafen visas endast för kvantifierbara centerline-parametrar.</span>
                             </div>
                           )}
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
+
+                        <div className="flex justify-between text-[8px] font-black uppercase text-slate-500 tracking-wider mt-1">
+                          <span>Dåtid &larr;</span>
+                          <span>Senaste mätning &rarr;</span>
+                        </div>
+                      </div>
+
+                      {/* HORIZONTAL TIMELINE ROW */}
+                      <div className="overflow-x-auto pb-4 pt-1 flex gap-3 scroll-smooth">
+                        {historyForPoint.map((log) => {
+                          const isOK = log.status === PointStatus.OK;
+                          const dateObj = new Date(log.timestamp);
+                          const formattedDate = dateObj.toLocaleDateString('sv-SE', { month: 'short', day: 'numeric' });
+                          const formattedTime = dateObj.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+
+                          const displayVal = getDisplayValue(log.value);
+                          const displayTgt = getDisplayValue(log.targetValue);
+
+                          return (
+                            <div 
+                              key={log.id} 
+                              className={`min-w-[180px] p-3 rounded-xl border flex flex-col justify-between shrink-0 transition-all ${
+                                isOK 
+                                  ? (theme === 'dark' ? 'bg-green-950/15 border-green-500/20 hover:border-green-500/40' : 'bg-green-50/40 border-green-200 hover:border-green-300') 
+                                  : (theme === 'dark' ? 'bg-red-950/15 border-red-500/20 hover:border-red-500/40' : 'bg-red-50/40 border-red-200 hover:border-red-300')
+                              }`}
+                            >
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-[9px] text-slate-500 font-bold flex items-center gap-1">
+                                  <Calendar size={10} /> {formattedDate}
+                                  <Clock size={10} /> {formattedTime}
+                                </span>
+                                <span className={`text-[8px] font-black px-1.5 py-0.5 rounded ${
+                                  isOK ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
+                                }`}>
+                                  {isOK ? 'OK' : 'TAGG'}
+                                </span>
+                              </div>
+
+                              <div className="flex items-baseline gap-1.5 mt-1.5 mb-1">
+                                <span className={`text-lg font-black font-mono tracking-tight ${theme === 'dark' ? 'text-white' : 'text-slate-800'}`}>
+                                  {displayVal}
+                                </span>
+                                <span className="text-[9px] text-slate-400 font-medium">
+                                  (Bör: {displayTgt})
+                                </span>
+                              </div>
+
+                              {log.comment && (
+                                <div className="mt-1 text-[9px] text-slate-500 dark:text-slate-400 italic bg-black/5 dark:bg-black/20 p-1.5 rounded flex items-start gap-1">
+                                  <MessageSquare size={10} className="shrink-0 mt-0.5 text-blue-500" />
+                                  <span className="line-clamp-2 leading-tight">{log.comment}</span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()
               ) : (
                 <div className={`text-center py-6 text-xs text-slate-500 font-medium italic border border-dashed rounded-xl ${
                   theme === 'dark' ? 'bg-gray-900/20 border-gray-700' : 'bg-slate-50 border-slate-250'
