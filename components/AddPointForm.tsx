@@ -46,11 +46,16 @@ const AddPointForm: React.FC<AddPointFormProps> = ({
     initialData?.machine ?? defaultMachine ?? (selectedLineId && machines[selectedLineId] ? machines[selectedLineId][0] : '')
   );
 
+  const getFallbackSection = (machineName: string) => {
+    const machineSecs = sections[machineName] || [];
+    return machineSecs.length > 0 ? machineSecs[0] : '';
+  };
+
   const [formData, setFormData] = useState<Partial<MachinePoint>>({
     number: initialData?.number ?? nextNumber,
     id: initialData?.id ?? `P-${nextNumber < 10 ? '0' + nextNumber : nextNumber}`,
     name: initialData?.name ?? '',
-    section: initialData?.section ?? (defaultSection !== 'All' ? defaultSection : '') ?? '',
+    section: initialData?.section || (defaultSection && defaultSection !== 'All' ? defaultSection : '') || getFallbackSection(selectedMachineName),
     description: initialData?.description ?? '',
     targetValue: initialData?.targetValue ?? '',
     tolerance: initialData?.tolerance ?? '',
@@ -129,7 +134,7 @@ const AddPointForm: React.FC<AddPointFormProps> = ({
       ...formData as MachinePoint, 
       lineId: selectedLineId,
       machine: selectedMachineName,
-      section: formData.section || '',
+      section: formData.section || getFallbackSection(selectedMachineName),
       phaseAngle: phaseAngleStr ? parseFloat(phaseAngleStr) : undefined 
     };
     onSave(finalPoint);
@@ -193,7 +198,8 @@ const AddPointForm: React.FC<AddPointFormProps> = ({
                         const machs = machines[val] || [];
                         const firstMach = machs[0] || '';
                         setSelectedMachineName(firstMach);
-                        handleChange('section', '');
+                        const machineSecs = sections[firstMach] || [];
+                        handleChange('section', machineSecs.length > 0 ? machineSecs[0] : '');
                       }}
                       options={lines.map(l => ({ value: l.id, label: l.name }))}
                       placeholder="Välj linje..."
@@ -208,7 +214,8 @@ const AddPointForm: React.FC<AddPointFormProps> = ({
                       value={selectedMachineName}
                       onChange={(val) => {
                         setSelectedMachineName(val);
-                        handleChange('section', '');
+                        const machineSecs = sections[val] || [];
+                        handleChange('section', machineSecs.length > 0 ? machineSecs[0] : '');
                       }}
                       options={(machines[selectedLineId] || []).map(m => ({ value: m, label: m }))}
                       placeholder="Välj maskin..."

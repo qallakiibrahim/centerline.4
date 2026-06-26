@@ -15,9 +15,10 @@ import ModuleEditor from './components/ModuleEditor';
 import Guide from './components/Guide';
 import CustomSelect from './components/CustomSelect';
 import HistoryView from './components/HistoryView';
-import { Map, List, Settings, Activity, Printer, ChevronLeft, ChevronRight, Plus, Edit3, BookOpen, Square, Crosshair, Image as ImageIcon, Sun, Moon, X, History, BarChart3 } from 'lucide-react';
+import { Map, List, Settings, Activity, Printer, ChevronLeft, ChevronRight, Plus, Edit3, BookOpen, Square, Crosshair, Image as ImageIcon, Sun, Moon, X, History, BarChart3, Eye } from 'lucide-react';
 import { dbService } from './dbService';
 import { DashboardView } from './components/DashboardView';
+import { OperatorView } from './components/OperatorView';
 
 // Factory structure data for cascading dropdowns
 const FACTORY_LINES = [
@@ -52,7 +53,7 @@ const MACHINE_SECTIONS: Record<string, string[]> = {
 };
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab ] = useState<'overview' | 'table' | 'phasing' | 'guide' | 'history' | 'dashboard'>('overview');
+  const [activeTab, setActiveTab ] = useState<'overview' | 'table' | 'phasing' | 'guide' | 'history' | 'dashboard' | 'operator'>('overview');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     if (typeof window !== 'undefined') {
@@ -1033,6 +1034,7 @@ const App: React.FC = () => {
           <nav className="p-3 space-y-2 mt-4">
             {[
               { id: 'overview', icon: Map, label: 'Karta' },
+              { id: 'operator', icon: Eye, label: 'Operatör Vy' },
               { id: 'dashboard', icon: BarChart3, label: 'Dashboard' },
               { id: 'phasing', icon: Activity, label: 'Synk' },
               { id: 'history', icon: History, label: 'Historik' },
@@ -1072,6 +1074,7 @@ const App: React.FC = () => {
         <nav className="flex md:hidden w-full justify-around items-center h-full px-1 overflow-x-auto no-scrollbar">
             {[
               { id: 'overview', icon: Map, label: 'Karta' },
+              { id: 'operator', icon: Eye, label: 'Operatör' },
               { id: 'dashboard', icon: BarChart3, label: 'Dash' },
               { id: 'phasing', icon: Activity, label: 'Synk' },
               { id: 'history', icon: History, label: 'Historik' },
@@ -1202,7 +1205,7 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <div className="max-w-6xl mx-auto w-full p-6 lg:p-10 space-y-8 print:max-w-none print:p-0 print:block">
+        <div className={`${activeTab === 'operator' ? 'max-w-7xl xl:max-w-[1550px]' : 'max-w-6xl'} mx-auto w-full p-6 lg:p-10 space-y-8 print:max-w-none print:p-0 print:block`}>
           
           {/* NY PRINT-HEADER (Endast sida 1, fungerar som "topp-kant" för ramen) */}
           <div className="hidden print:flex bg-[#0070C0] text-white p-8 justify-between items-center mb-6 rounded-none -mx-[12mm]">
@@ -1217,58 +1220,80 @@ const App: React.FC = () => {
             )}
           </div>
 
-          <header className={`flex justify-between items-end border-b ${theme === 'dark' ? 'border-gray-800' : 'border-[#E2E8F0]'} pb-6 print:hidden`}>
-            <div>
-              <h1 className={`text-3xl font-black uppercase italic tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-[#0F172A]'} print:text-4xl`}>{translations.sv.headerTitle}</h1>
-              <p className="text-gray-500 text-[10px] font-black uppercase tracking-[0.3em] mt-1 italic">{translations.sv.headerSubtitle}</p>
-            </div>
-
-            {/* Mobile Layout Edit Switch */}
-            <div className="md:hidden self-center">
-              <button
-                onClick={handleToggleDesignMode}
-                className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[10px] font-slate uppercase font-black tracking-wider transition-all shadow-md cursor-pointer ${
-                  isDesignMode
-                    ? 'bg-amber-600 hover:bg-amber-500 text-black font-sans'
-                    : (theme === 'dark' ? 'bg-[#1E293B] hover:bg-[#334155] text-gray-350 border border-gray-800' : 'bg-[#F1F5F9] hover:bg-[#E2E8F0] text-slate-755 border border-slate-200')
-                }`}
-                title={isDesignMode ? "Lås layout" : "Redigera layout (Flytta punkter)"}
-              >
-                <Edit3 size={12} />
-                <span>{isDesignMode ? 'LÅS' : 'REDIGERA'}</span>
-              </button>
-            </div>
-            
-            <div className="hidden print:block text-right">
-              <p className="text-sm font-black uppercase tracking-widest">{currentPrintDate}</p>
-            </div>
-
-            {/* Save Status Indicator */}
-            {!isLoading && (saveStatus !== 'idle' || hasUnsavedChanges) && (
-              <div className="fixed top-6 right-6 z-[100] animate-in fade-in slide-in-from-top-4 duration-300">
-                <div className={`px-4 py-2 rounded-full shadow-2xl border flex items-center gap-3 ${
-                  saveStatus === 'saving' ? 'bg-blue-600 border-blue-500 text-white' :
-                  saveStatus === 'success' ? 'bg-emerald-600 border-emerald-500 text-white' :
-                  saveStatus === 'error' ? 'bg-red-600 border-red-500 text-white' :
-                  'bg-amber-600 border-amber-500 text-white'
-                }`}>
-                  {saveStatus === 'saving' && <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />}
-                  {saveStatus === 'success' && <div className="w-2 h-2 bg-white rounded-full animate-pulse" />}
-                  {hasUnsavedChanges && saveStatus === 'idle' && <div className="w-2 h-2 bg-white rounded-full animate-bounce" />}
-                  <span className="text-[10px] font-black uppercase tracking-widest">
-                    {saveStatus === 'saving' ? translations.sv.saving : 
-                     saveStatus === 'success' ? (currentUser && currentUser.emailVerified ? translations.sv.saved : 'Sparat lokalt!') : 
-                     saveStatus === 'error' ? translations.sv.saveError : 
-                     'Väntar på att spara...'}
-                  </span>
-                </div>
+          {activeTab !== 'operator' ? (
+            <header className={`flex justify-between items-end border-b ${theme === 'dark' ? 'border-gray-800' : 'border-[#E2E8F0]'} pb-6 print:hidden`}>
+              <div>
+                <h1 className={`text-3xl font-black uppercase italic tracking-tighter ${theme === 'dark' ? 'text-white' : 'text-[#0F172A]'} print:text-4xl`}>{translations.sv.headerTitle}</h1>
+                <p className="text-gray-500 text-[10px] font-black uppercase tracking-[0.3em] mt-1 italic">{translations.sv.headerSubtitle}</p>
               </div>
-            )}
-          </header>
+
+              {/* Mobile Layout Edit Switch */}
+              <div className="md:hidden self-center">
+                <button
+                  onClick={handleToggleDesignMode}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[10px] font-slate uppercase font-black tracking-wider transition-all shadow-md cursor-pointer ${
+                    isDesignMode
+                      ? 'bg-amber-600 hover:bg-amber-500 text-black font-sans'
+                      : (theme === 'dark' ? 'bg-[#1E293B] hover:bg-[#334155] text-gray-350 border border-gray-800' : 'bg-[#F1F5F9] hover:bg-[#E2E8F0] text-slate-755 border border-slate-200')
+                  }`}
+                  title={isDesignMode ? "Lås layout" : "Redigera layout (Flytta punkter)"}
+                >
+                  <Edit3 size={12} />
+                  <span>{isDesignMode ? 'LÅS' : 'REDIGERA'}</span>
+                </button>
+              </div>
+              
+              <div className="hidden print:block text-right">
+                <p className="text-sm font-black uppercase tracking-widest">{currentPrintDate}</p>
+              </div>
+
+              {/* Save Status Indicator */}
+              {!isLoading && (saveStatus !== 'idle' || hasUnsavedChanges) && (
+                <div className="fixed top-6 right-6 z-[100] animate-in fade-in slide-in-from-top-4 duration-300">
+                  <div className={`px-4 py-2 rounded-full shadow-2xl border flex items-center gap-3 ${
+                    saveStatus === 'saving' ? 'bg-blue-600 border-blue-500 text-white' :
+                    saveStatus === 'success' ? 'bg-emerald-600 border-emerald-500 text-white' :
+                    saveStatus === 'error' ? 'bg-red-600 border-red-500 text-white' :
+                    'bg-amber-600 border-amber-500 text-white'
+                  }`}>
+                    {saveStatus === 'saving' && <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                    {saveStatus === 'success' && <div className="w-2 h-2 bg-white rounded-full animate-pulse" />}
+                    {hasUnsavedChanges && saveStatus === 'idle' && <div className="w-2 h-2 bg-white rounded-full animate-bounce" />}
+                    <span className="text-[10px] font-black uppercase tracking-widest">
+                      {saveStatus === 'saving' ? translations.sv.saving : 
+                       saveStatus === 'success' ? (currentUser && currentUser.emailVerified ? translations.sv.saved : 'Sparat lokalt!') : 
+                       saveStatus === 'error' ? translations.sv.saveError : 
+                       'Väntar på att spara...'}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </header>
+          ) : !isLoading && (saveStatus !== 'idle' || hasUnsavedChanges) ? (
+            <div className="fixed top-6 right-6 z-[100] animate-in fade-in slide-in-from-top-4 duration-300">
+              <div className={`px-4 py-2 rounded-full shadow-2xl border flex items-center gap-3 ${
+                saveStatus === 'saving' ? 'bg-blue-600 border-blue-500 text-white' :
+                saveStatus === 'success' ? 'bg-emerald-600 border-emerald-500 text-white' :
+                saveStatus === 'error' ? 'bg-red-600 border-red-500 text-white' :
+                'bg-amber-600 border-amber-500 text-white'
+              }`}>
+                {saveStatus === 'saving' && <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                {saveStatus === 'success' && <div className="w-2 h-2 bg-white rounded-full animate-pulse" />}
+                {hasUnsavedChanges && saveStatus === 'idle' && <div className="w-2 h-2 bg-white rounded-full animate-bounce" />}
+                <span className="text-[10px] font-black uppercase tracking-widest">
+                  {saveStatus === 'saving' ? translations.sv.saving : 
+                   saveStatus === 'success' ? (currentUser && currentUser.emailVerified ? translations.sv.saved : 'Sparat lokalt!') : 
+                   saveStatus === 'error' ? translations.sv.saveError : 
+                   'Väntar på att spara...'}
+                </span>
+              </div>
+            </div>
+          ) : null}
 
           <div className="space-y-12 print:space-y-10">
             {/* FABRIKSHIERARKI OCH CL-PROGRAM NAVIGERING */}
-            <div className={`p-6 ${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-slate-50 border-slate-200'} rounded-[2rem] border transition-all duration-300 print:hidden`}>
+            {activeTab !== 'operator' && (
+              <div className={`p-6 ${theme === 'dark' ? 'bg-gray-900 border-gray-800' : 'bg-slate-50 border-slate-200'} rounded-[2rem] border transition-all duration-300 print:hidden`}>
               <div className="flex flex-col gap-6">
                 <div className="flex justify-between items-center flex-wrap gap-4">
                   <div>
@@ -1369,6 +1394,7 @@ const App: React.FC = () => {
                 </div>
               </div>
             </div>
+            )}
 
             {/* MASKINSKISS / KARTA */}
             <section className={`${activeTab === 'overview' ? 'block' : 'print:block hidden'} print:break-inside-avoid print:mb-10`}>
@@ -1463,6 +1489,41 @@ const App: React.FC = () => {
 
             {/* Skärm-specifika flikar */}
             <div className="print:hidden">
+              {activeTab === 'operator' && (
+                <OperatorView
+                  points={points.filter(p => {
+                    const matchesLine = !p.lineId || p.lineId === selectedLine;
+                    const matchesMachine = !p.machine || p.machine === selectedMachine || 
+                      (selectedMachine === 'Packmaskin (Tray Packer - Pilot)' && !p.machine);
+                    return matchesLine && matchesMachine;
+                  })}
+                  layout={activeLayout}
+                  selectedMachine={selectedMachine}
+                  activeRecipe={activeRecipe}
+                  theme={theme}
+                  onUpdatePointStatus={(pointId, value, status, comment) => {
+                    const p = points.find(x => x.id === pointId);
+                    if (!p) return;
+                    
+                    const updatedPoint = {
+                      ...p,
+                      status: status,
+                      tagComment: comment || '',
+                      lastChecked: new Date().toISOString()
+                    };
+                    
+                    // Update state
+                    setPoints(points.map(x => x.id === pointId ? updatedPoint : x));
+                    
+                    // Register history log
+                    handleRegisterValue(p, value, status, comment || 'Registrerad via Operatörsvy.');
+                  }}
+                  pointHistory={pointHistory}
+                  machineBackgrounds={machineBackgrounds}
+                  onUpdateMachineBackgrounds={setMachineBackgrounds}
+                  canEditLayout={canEditLayout}
+                />
+              )}
               {activeTab === 'phasing' && <PhasingGauge currentDegree={0} points={points} theme={theme} />}
               {activeTab === 'dashboard' && (
                 <DashboardView 

@@ -169,9 +169,39 @@ export class FirebaseDatabaseService implements DatabaseService {
   public async saveState(key: string, value: any): Promise<void> {
     const path = `app_state/${key}`;
     try {
+      // Recursively strip or convert any undefined fields to null before sending to Firestore
+      const sanitizeForFirestore = (val: any): any => {
+        if (val === undefined) {
+          return null;
+        }
+        if (val === null) {
+          return null;
+        }
+        if (Array.isArray(val)) {
+          return val.map(sanitizeForFirestore);
+        }
+        if (typeof val === 'object') {
+          // Keep Firestore DocumentReferences or other special instances as-is if present
+          if (val.constructor && val.constructor.name !== 'Object' && val.constructor.name !== 'Array') {
+            return val;
+          }
+          const cleaned: Record<string, any> = {};
+          for (const k of Object.keys(val)) {
+            const cleanedVal = sanitizeForFirestore(val[k]);
+            if (cleanedVal !== undefined) {
+              cleaned[k] = cleanedVal;
+            }
+          }
+          return cleaned;
+        }
+        return val;
+      };
+
+      const sanitizedValue = sanitizeForFirestore(value);
+
       await setDoc(doc(db, 'app_state', key), {
         key,
-        value
+        value: sanitizedValue
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, path);
