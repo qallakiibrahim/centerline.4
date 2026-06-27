@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { PointHistoryLog, MachinePoint, PointStatus } from '../types';
+import { isSectionMatch } from '../App';
 import { Search, Filter, Calendar, BarChart3, Clock, AlertTriangle, CheckCircle2, Sliders, ChevronDown, ListFilter, Activity, MessageSquare, Download } from 'lucide-react';
 import { 
   LineChart, 
@@ -134,7 +135,7 @@ const HistoryView: React.FC<HistoryViewProps> = ({
           (log.comment || '').toLowerCase().includes(searchTerm.toLowerCase());
         
         const point = points.find(p => p.id === log.pointId);
-        const matchesSection = selectedSection === 'All' || (point && point.section === selectedSection);
+        const matchesSection = selectedSection === 'All' || (point && isSectionMatch(point.section || '', selectedSection));
         
         const matchesStatus = 
           selectedStatus === 'All' ||

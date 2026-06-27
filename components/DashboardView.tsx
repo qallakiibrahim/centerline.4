@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { MachinePoint, PointHistoryLog, PointStatus, Criticality } from '../types';
+import { isSectionMatch } from '../App';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -231,7 +232,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         p.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.description.toLowerCase().includes(searchTerm.toLowerCase());
 
-      const matchesSection = selectedSection === 'All' || p.section === selectedSection;
+      const matchesSection = selectedSection === 'All' || isSectionMatch(p.section || '', selectedSection);
 
       let matchesCriticality = true;
       if (criticalityFilter === 'P1') matchesCriticality = p.criticality === Criticality.P1;

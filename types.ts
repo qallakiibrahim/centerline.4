@@ -47,6 +47,7 @@ export interface MachinePoint {
   recipeTargets?: Record<string, { targetValue: string; tolerance: string }>;
   lineId?: string;
   machine?: string;
+  sectionCoordinates?: { x: number; y: number };
 }
 
 export interface DefinitionDetail {

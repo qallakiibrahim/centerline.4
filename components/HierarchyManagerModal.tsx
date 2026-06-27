@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Plus, Edit2, Trash2, Check, AlertTriangle, ChevronRight, Layers, Cpu, Compass, Settings } from 'lucide-react';
 import { MachinePoint, MachineModule } from '../types';
 import { DEFAULT_RECIPES } from '../constants';
+import { cleanSection, isSectionMatch } from '../App';
 
 interface HierarchyManagerModalProps {
   theme?: 'dark' | 'light';
@@ -58,6 +59,10 @@ export const HierarchyManagerModal: React.FC<HierarchyManagerModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'recipes' | 'lines' | 'machines' | 'sections'>('lines');
   
+  const defaultMachineName = React.useMemo(() => {
+    return (machines['l1'] && machines['l1'][0]) || 'Packmaskin (Tray Packer - Pilot)';
+  }, [machines]);
+  
   // Local temporary creation & renaming states to avoid native prompt()
   const [newInputName, setNewInputName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -72,11 +77,11 @@ export const HierarchyManagerModal: React.FC<HierarchyManagerModalProps> = ({
     if (recipes[selectedMachine]) {
       return recipes[selectedMachine];
     }
-    if (selectedMachine === 'Packmaskin (Tray Packer - Pilot)') {
+    if (selectedMachine === 'Packmaskin (Tray Packer - Pilot)' || selectedMachine === defaultMachineName) {
       return DEFAULT_RECIPES;
     }
     return [];
-  }, [recipes, selectedMachine]);
+  }, [recipes, selectedMachine, defaultMachineName]);
 
   const resetLocalState = () => {
     setNewInputName('');
@@ -101,7 +106,7 @@ export const HierarchyManagerModal: React.FC<HierarchyManagerModalProps> = ({
     const pruned = newInputName.trim();
     if (!pruned) return;
     
-    const machineList = recipes[selectedMachine] || (selectedMachine === 'Packmaskin (Tray Packer - Pilot)' ? [...DEFAULT_RECIPES] : []);
+    const machineList = recipes[selectedMachine] || (selectedMachine === 'Packmaskin (Tray Packer - Pilot)' || selectedMachine === defaultMachineName ? [...DEFAULT_RECIPES] : []);
     if (machineList.includes(pruned)) {
       setErrorMessage('Detta CL-program finns redan för denna maskin!');
       return;
@@ -130,7 +135,7 @@ export const HierarchyManagerModal: React.FC<HierarchyManagerModalProps> = ({
       return;
     }
     
-    const machineList = recipes[selectedMachine] || (selectedMachine === 'Packmaskin (Tray Packer - Pilot)' ? [...DEFAULT_RECIPES] : []);
+    const machineList = recipes[selectedMachine] || (selectedMachine === 'Packmaskin (Tray Packer - Pilot)' || selectedMachine === defaultMachineName ? [...DEFAULT_RECIPES] : []);
     if (machineList.includes(pruned)) {
       setErrorMessage('Detta CL-programnamn används redan för denna maskin!');
       return;
@@ -145,7 +150,11 @@ export const HierarchyManagerModal: React.FC<HierarchyManagerModalProps> = ({
     
     // Update points targets
     const updatedPoints = points.map(p => {
-      const isMatch = p.machine === selectedMachine && p.lineId === selectedLine;
+      const matchesLine = p.lineId === selectedLine || (!p.lineId && selectedLine === ((lines && lines[0]?.id) || 'l1'));
+      const matchesMachine = p.machine === selectedMachine || 
+        (!p.machine && selectedMachine === defaultMachineName) ||
+        (p.machine === 'Packmaskin (Tray Packer - Pilot)' && selectedMachine === defaultMachineName);
+      const isMatch = matchesLine && matchesMachine;
       if (isMatch && p.recipeTargets && p.recipeTargets[oldName]) {
         const targetsCopy = { ...p.recipeTargets };
         targetsCopy[pruned] = targetsCopy[oldName];
@@ -164,7 +173,7 @@ export const HierarchyManagerModal: React.FC<HierarchyManagerModalProps> = ({
 
   const handleDeleteRecipe = (recipe: string) => {
     if (!selectedMachine) return;
-    const machineList = recipes[selectedMachine] || (selectedMachine === 'Packmaskin (Tray Packer - Pilot)' ? [...DEFAULT_RECIPES] : []);
+    const machineList = recipes[selectedMachine] || (selectedMachine === 'Packmaskin (Tray Packer - Pilot)' || selectedMachine === defaultMachineName ? [...DEFAULT_RECIPES] : []);
     if (machineList.length <= 1) {
       setErrorMessage('Du kan inte rensa bort det sista CL-programmet för denna maskin!');
       return;
@@ -313,9 +322,13 @@ export const HierarchyManagerModal: React.FC<HierarchyManagerModalProps> = ({
 
     // Rename on points
     const updatedPoints = points.map(p => {
-      const isMatch = p.machine === oldName && p.lineId === selectedLine;
-      if (isMatch) {
-        return { ...p, machine: pruned };
+      const isMatch = p.machine === oldName || 
+        (!p.machine && oldName === 'Packmaskin (Tray Packer - Pilot)') ||
+        (p.machine === 'Packmaskin (Tray Packer - Pilot)' && oldName === defaultMachineName);
+      const isLineMatch = p.lineId === selectedLine ||
+        (!p.lineId && selectedLine === 'l1');
+      if (isMatch && isLineMatch) {
+        return { ...p, machine: pruned, lineId: selectedLine };
       }
       return p;
     });
@@ -337,7 +350,17 @@ export const HierarchyManagerModal: React.FC<HierarchyManagerModalProps> = ({
     onUpdateMachines(updatedMachines);
 
     // Filter out points with that machine
-    const remainingPoints = points.map(p => p.machine === mach && p.lineId === selectedLine ? { ...p, machine: '', lineId: '' } : p);
+    const remainingPoints = points.map(p => {
+      const isMatch = p.machine === mach || 
+        (!p.machine && mach === 'Packmaskin (Tray Packer - Pilot)') ||
+        (p.machine === 'Packmaskin (Tray Packer - Pilot)' && mach === defaultMachineName);
+      const isLineMatch = p.lineId === selectedLine ||
+        (!p.lineId && selectedLine === 'l1');
+      if (isMatch && isLineMatch) {
+        return { ...p, machine: '', lineId: '' };
+      }
+      return p;
+    });
     onUpdatePoints(remainingPoints);
 
     // Handle sections
@@ -377,15 +400,32 @@ export const HierarchyManagerModal: React.FC<HierarchyManagerModalProps> = ({
     onUpdateSections(updated);
 
     // Sync creation with physical layouts/rutorna mapping
-    const currentLayout = layouts[selectedMachine] || [];
+    let currentLayout = layouts[selectedMachine];
+    if (!currentLayout || currentLayout.length === 0) {
+      // Generate default layout from current list of sections before adding the new one
+      const spacing = Math.floor(100 / (currentList.length || 1));
+      currentLayout = currentList.map((sec, idx) => ({
+        id: `mod_${selectedMachine}_${idx}_init_` + Date.now(),
+        label: sec,
+        x: idx * spacing,
+        y: 15,
+        width: Math.max(12, spacing - 3),
+        height: 12,
+        color: ['#3b82f6', '#6366f1', '#eab308', '#f97316', '#ec4899', '#f472b6', '#a855f7'][idx % 7],
+        hasFill: true,
+        fontSize: 2.2,
+        wrapText: false
+      }));
+    }
+
     const newModule: MachineModule = {
       id: `mod_${selectedMachine}_${currentList.length}_` + Date.now(),
       label: pruned, 
-      x: 10 + (currentList.length * 15) % 80,
-      y: 20 + Math.floor((currentList.length * 15) / 80) * 12,
+      x: 10 + (currentLayout.length * 15) % 80,
+      y: 20 + Math.floor((currentLayout.length * 15) / 80) * 12,
       width: 14,
       height: 10,
-      color: ['#3b82f6', '#6366f1', '#eab308', '#f97316', '#ec4899', '#f472b6', '#a855f7'][currentList.length % 7],
+      color: ['#3b82f6', '#6366f1', '#eab308', '#f97316', '#ec4899', '#f472b6', '#a855f7'][currentLayout.length % 7],
       hasFill: true,
       fontSize: 2.2,
       wrapText: false
@@ -434,7 +474,11 @@ export const HierarchyManagerModal: React.FC<HierarchyManagerModalProps> = ({
 
     // Update related points
     const updatedPoints = points.map(p => {
-      const isMatch = p.section === oldName && p.machine === selectedMachine && p.lineId === selectedLine;
+      const matchesLine = p.lineId === selectedLine || (!p.lineId && selectedLine === ((lines && lines[0]?.id) || 'l1'));
+      const matchesMachine = p.machine === selectedMachine || 
+        (!p.machine && selectedMachine === defaultMachineName) ||
+        (p.machine === 'Packmaskin (Tray Packer - Pilot)' && selectedMachine === defaultMachineName);
+      const isMatch = isSectionMatch(p.section || '', oldName) && matchesLine && matchesMachine;
       if (isMatch) {
         return { ...p, section: pruned };
       }
@@ -467,7 +511,11 @@ export const HierarchyManagerModal: React.FC<HierarchyManagerModalProps> = ({
 
     // Reset section on matching points
     const updatedPoints = points.map(p => {
-      const isMatch = p.section === sec && p.machine === selectedMachine && p.lineId === selectedLine;
+      const matchesLine = p.lineId === selectedLine || (!p.lineId && selectedLine === ((lines && lines[0]?.id) || 'l1'));
+      const matchesMachine = p.machine === selectedMachine || 
+        (!p.machine && selectedMachine === defaultMachineName) ||
+        (p.machine === 'Packmaskin (Tray Packer - Pilot)' && selectedMachine === defaultMachineName);
+      const isMatch = isSectionMatch(p.section || '', sec) && matchesLine && matchesMachine;
       if (isMatch) {
         return { ...p, section: 'All' };
       }

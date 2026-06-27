@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { MachinePoint, PointStatus, Criticality } from '../types';
+import { isSectionMatch } from '../App';
 import { Search, AlertTriangle, CheckCircle2, Tag, Filter, ChevronDown } from 'lucide-react';
 import { CRITICALITY_COLORS } from '../constants';
 import { translations } from '../translations';
@@ -40,7 +41,7 @@ const ParameterTable: React.FC<ParameterTableProps> = ({
 
   const filteredPoints = points.filter(p => {
     const matchesText = p.name.toLowerCase().includes(filter.toLowerCase()) || p.id.toLowerCase().includes(filter.toLowerCase());
-    const matchesSection = sectionFilter === 'All' || p.section === sectionFilter;
+    const matchesSection = sectionFilter === 'All' || isSectionMatch(p.section || '', sectionFilter);
     const matchesStatus = statusFilter === 'All' || p.status === statusFilter;
     return matchesText && matchesSection && matchesStatus;
   });

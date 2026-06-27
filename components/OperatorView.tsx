@@ -1,7 +1,8 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MachinePoint, MachineModule, PointStatus, Criticality } from '../types';
 import { DEFAULT_MACHINE_LAYOUT } from '../constants';
+import { cleanSection, isSectionMatch } from '../App';
 import { 
   ChevronLeft, 
   Check, 
@@ -19,7 +20,10 @@ import {
   BookmarkCheck,
   Eye,
   SlidersHorizontal,
-  ThumbsUp
+  ThumbsUp,
+  Layers,
+  Cpu,
+  Move
 } from 'lucide-react';
 
 interface OperatorViewProps {
@@ -33,6 +37,18 @@ interface OperatorViewProps {
   machineBackgrounds: Record<string, string>;
   onUpdateMachineBackgrounds: (backgrounds: Record<string, string>) => void;
   canEditLayout?: boolean;
+  onUpdatePoint?: (point: MachinePoint) => void;
+  onUpdatePoints?: (points: MachinePoint[]) => void;
+  
+  // Visual Hierarchy Props
+  selectedLine?: string;
+  lines?: { id: string; name: string }[];
+  machines?: Record<string, string[]>;
+  recipes?: Record<string, string[]>;
+  sections?: Record<string, string[]>;
+  onSelectLine?: (lineId: string) => void;
+  onSelectMachine?: (machineName: string) => void;
+  onSelectRecipe?: (recipe: string) => void;
 }
 
 export const OperatorView: React.FC<OperatorViewProps> = ({
@@ -45,8 +61,22 @@ export const OperatorView: React.FC<OperatorViewProps> = ({
   pointHistory = [],
   machineBackgrounds,
   onUpdateMachineBackgrounds,
-  canEditLayout = false
+  canEditLayout = false,
+  onUpdatePoint,
+  onUpdatePoints,
+  selectedLine,
+  lines = [],
+  machines = {},
+  recipes = {},
+  sections = {},
+  onSelectLine,
+  onSelectMachine,
+  onSelectRecipe
 }) => {
+  const defaultMachineName = useMemo(() => {
+    return (machines?.['l1'] && machines['l1'][0]) || 'Packmaskin (Tray Packer - Pilot)';
+  }, [machines]);
+
   // Navigation states
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [activePointId, setActivePointId] = useState<string | null>(null);
@@ -54,21 +84,135 @@ export const OperatorView: React.FC<OperatorViewProps> = ({
   const [comment, setComment] = useState<string>('');
   const [showOnlyDeviations, setShowOnlyDeviations] = useState<boolean>(false);
 
+  // Repositioning states
+  const [isRepositionMode, setIsRepositionMode] = useState<boolean>(false);
+  const [draggedPointId, setDraggedPointId] = useState<string | null>(null);
+  const photoContainerRef = useRef<HTMLDivElement>(null);
+
+  // Reset local section and active point if selected machine or line changes
+  useEffect(() => {
+    setSelectedSection(null);
+    setActivePointId(null);
+  }, [selectedMachine, selectedLine]);
+
   // Dynamic Custom Section Background lookup
   const sectionBgUrl = useMemo(() => {
     if (!selectedSection) return null;
     return machineBackgrounds[`${selectedMachine}_${selectedSection}`] || null;
   }, [machineBackgrounds, selectedMachine, selectedSection]);
 
+  // Resolve all sections/modules to display in the overview grid
+  const displaySections = useMemo(() => {
+    // Start with the modules defined in the layout
+    const sectionList = [...layout.map(mod => ({
+      id: mod.id,
+      label: mod.label,
+      color: mod.color || '#3b82f6'
+    }))];
+
+    // Find any sections defined in the hierarchy sections for this machine
+    const existingLabels = new Set(sectionList.map(s => cleanSection(s.label)));
+    
+    const machineSecs = sections[selectedMachine] || [];
+    machineSecs.forEach(secName => {
+      const cleaned = cleanSection(secName);
+      if (!existingLabels.has(cleaned)) {
+        existingLabels.add(cleaned);
+        sectionList.push({
+          id: `section_hierarchy_${secName}`,
+          label: secName,
+          color: '#6366f1' // Default indigo color for auto-added sections
+        });
+      }
+    });
+
+    // Check if there are any unassigned points (points whose section doesn't match any displaySection)
+    let hasUnassignedPoints = false;
+    points.forEach(point => {
+      const pointSecName = point.section || '';
+      if (!pointSecName || pointSecName.trim() === '') {
+        hasUnassignedPoints = true;
+      } else {
+        const matchesAny = sectionList.some(s => isSectionMatch(pointSecName, s.label));
+        if (!matchesAny) {
+          hasUnassignedPoints = true;
+        }
+      }
+    });
+
+    if (hasUnassignedPoints) {
+      sectionList.push({
+        id: 'unassigned_points',
+        label: 'Ej kategoriserade',
+        color: '#f43f5e'
+      });
+    }
+
+    return sectionList;
+  }, [layout, points, sections, selectedMachine]);
+
+  // Group points by section for counting and overview indicators
+  const sectionStats = useMemo(() => {
+    const stats: Record<string, { total: number; ok: number; red: number; yellow: number }> = {};
+    
+    // Initialize stats for displaySections labels
+    displaySections.forEach(sec => {
+      stats[sec.label] = { total: 0, ok: 0, red: 0, yellow: 0 };
+    });
+
+    // Populate stats from points
+    points.forEach(point => {
+      const pointSec = !point.section || point.section.trim() === '' ? 'Ej kategoriserade' : point.section.trim();
+      
+      // Find matching displaySection label using our robust matcher
+      const matchingSec = displaySections.find(s => {
+        if (s.label === 'Ej kategoriserade') {
+          return pointSec === 'Ej kategoriserade' || !displaySections.some(other => other.label !== 'Ej kategoriserade' && isSectionMatch(pointSec, other.label));
+        }
+        return isSectionMatch(pointSec, s.label);
+      });
+      const secName = matchingSec ? matchingSec.label : 'Ej kategoriserade';
+      
+      if (!stats[secName]) {
+        stats[secName] = { total: 0, ok: 0, red: 0, yellow: 0 };
+      }
+      
+      stats[secName].total++;
+      
+      const status = point.status || PointStatus.OK;
+      if (status === PointStatus.OK) {
+        stats[secName].ok++;
+      } else if (status === PointStatus.TAGGED_RED) {
+        stats[secName].red++;
+      } else {
+        stats[secName].yellow++; // TAGGED_YELLOW or OUT_OF_SPEC
+      }
+    });
+
+    return stats;
+  }, [points, displaySections]);
+
   // Points belonging to the currently zoomed-in section
   const sectionPoints = useMemo(() => {
     if (!selectedSection) return [];
-    return points.filter(p => p.section === selectedSection)
-      .filter(p => {
-        if (!showOnlyDeviations) return true;
-        return p.status && p.status !== PointStatus.OK;
-      });
-  }, [points, selectedSection, showOnlyDeviations]);
+    return points.filter(p => {
+      const matchesLine = !p.lineId || p.lineId === selectedLine;
+      const matchesMachine = p.machine === selectedMachine || 
+        (!p.machine && selectedMachine === defaultMachineName) ||
+        (p.machine === 'Packmaskin (Tray Packer - Pilot)' && selectedMachine === defaultMachineName);
+      if (!(matchesLine && matchesMachine)) return false;
+
+      if (selectedSection === 'Ej kategoriserade') {
+        const inAnyDisplaySection = displaySections.some(s => s.label !== 'Ej kategoriserade' && isSectionMatch(p.section || '', s.label));
+        return !p.section || p.section.trim() === '' || !inAnyDisplaySection;
+      }
+      return isSectionMatch(p.section || '', selectedSection);
+    })
+    .filter(p => {
+      if (!showOnlyDeviations) return true;
+      return p.status && p.status !== PointStatus.OK;
+    });
+  }, [points, selectedSection, showOnlyDeviations, selectedLine, selectedMachine, defaultMachineName, displaySections]);
 
   const activeSectionBg = useMemo(() => {
     if (sectionBgUrl) return sectionBgUrl;
@@ -83,6 +227,86 @@ export const OperatorView: React.FC<OperatorViewProps> = ({
     // Fallback 3: No image
     return null;
   }, [sectionBgUrl, sectionPoints, machineBackgrounds, selectedMachine]);
+
+  // Helper to get relative coordinates for a point in a section
+  const getRelativeCoordinates = (point: MachinePoint) => {
+    if (point.sectionCoordinates) {
+      return point.sectionCoordinates;
+    }
+    if (!selectedSection) return point.coordinates;
+    const mod = layout?.find(m => m.label.trim().toLowerCase() === selectedSection.trim().toLowerCase());
+    let x = point.coordinates.x;
+    let y = point.coordinates.y;
+    if (mod && mod.width > 0 && mod.height > 0) {
+      x = ((point.coordinates.x - mod.x) / mod.width) * 100;
+      y = ((point.coordinates.y - mod.y) / mod.height) * 100;
+    }
+    return {
+      x: Math.min(95, Math.max(5, x)),
+      y: Math.min(95, Math.max(5, y))
+    };
+  };
+
+  const handlePointDragStart = (e: React.MouseEvent | React.TouchEvent, pointId: string) => {
+    if (!isRepositionMode) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDraggedPointId(pointId);
+
+    const handleDragMove = (moveEvent: MouseEvent | TouchEvent) => {
+      if (!photoContainerRef.current) return;
+      const rect = photoContainerRef.current.getBoundingClientRect();
+      
+      const clientX = 'touches' in moveEvent ? moveEvent.touches[0].clientX : moveEvent.clientX;
+      const clientY = 'touches' in moveEvent ? moveEvent.touches[0].clientY : moveEvent.clientY;
+      
+      let x = ((clientX - rect.left) / rect.width) * 100;
+      let y = ((clientY - rect.top) / rect.height) * 100;
+      
+      // Clamp values
+      x = Math.max(2, Math.min(98, x));
+      y = Math.max(2, Math.min(98, y));
+      
+      // Snapping to nearest 0.5% for visual alignment
+      x = Math.round(x * 2) / 2;
+      y = Math.round(y * 2) / 2;
+
+      // Update the point's sectionCoordinates in parent state!
+      const p = points.find(point => point.id === pointId);
+      if (p && onUpdatePoint) {
+        onUpdatePoint({
+          ...p,
+          sectionCoordinates: { x, y }
+        });
+      }
+    };
+
+    const handleDragEnd = () => {
+      setDraggedPointId(null);
+      window.removeEventListener('mousemove', handleDragMove);
+      window.removeEventListener('mouseup', handleDragEnd);
+      window.removeEventListener('touchmove', handleDragMove);
+      window.removeEventListener('touchend', handleDragEnd);
+    };
+
+    window.addEventListener('mousemove', handleDragMove);
+    window.addEventListener('mouseup', handleDragEnd);
+    window.addEventListener('touchmove', handleDragMove, { passive: false });
+    window.addEventListener('touchend', handleDragEnd);
+  };
+
+  const handleResetSectionPointPositions = () => {
+    if (!selectedSection || !onUpdatePoints) return;
+    const updatedPoints = points.map(p => {
+      if (isSectionMatch(p.section || '', selectedSection) && p.sectionCoordinates) {
+        const copy = { ...p };
+        delete copy.sectionCoordinates;
+        return copy;
+      }
+      return p;
+    });
+    onUpdatePoints(updatedPoints);
+  };
 
   const handleSectionBgUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -107,68 +331,11 @@ export const OperatorView: React.FC<OperatorViewProps> = ({
     }
   };
 
-  // Group points by section for counting and overview indicators
-  const sectionStats = useMemo(() => {
-    const stats: Record<string, { total: number; ok: number; red: number; yellow: number }> = {};
-    
-    // Initialize stats for layout modules
-    layout.forEach(mod => {
-      stats[mod.label] = { total: 0, ok: 0, red: 0, yellow: 0 };
-    });
-
-    // Populate stats from points
-    points.forEach(point => {
-      const secName = point.section;
-      if (!stats[secName]) {
-        stats[secName] = { total: 0, ok: 0, red: 0, yellow: 0 };
-      }
-      
-      stats[secName].total++;
-      
-      const status = point.status || PointStatus.OK;
-      if (status === PointStatus.OK) {
-        stats[secName].ok++;
-      } else if (status === PointStatus.TAGGED_RED) {
-        stats[secName].red++;
-      } else {
-        stats[secName].yellow++; // TAGGED_YELLOW or OUT_OF_SPEC
-      }
-    });
-
-    return stats;
-  }, [points, layout]);
-
-  // Resolve all sections/modules to display in the overview grid
-  const displaySections = useMemo(() => {
-    // Start with the modules defined in the layout
-    const sectionList = [...layout.map(mod => ({
-      id: mod.id,
-      label: mod.label,
-      color: mod.color || '#3b82f6'
-    }))];
-
-    // Find any sections from the points that are not already in layout
-    const existingLabels = new Set(sectionList.map(s => s.label));
-    
-    points.forEach(point => {
-      if (point.section && !existingLabels.has(point.section)) {
-        existingLabels.add(point.section);
-        sectionList.push({
-          id: `fallback_${point.section}`,
-          label: point.section,
-          color: '#6366f1' // Default indigo color for auto-added sections
-        });
-      }
-    });
-
-    return sectionList;
-  }, [layout, points]);
-
   // Resolve all sections/modules to display in the overview map with coordinate fallbacks
   const resolvedModules = useMemo(() => {
     let fallbackCount = 0;
     return displaySections.map(sec => {
-      const existing = layout.find(m => m.label === sec.label);
+      const existing = layout.find(m => isSectionMatch(m.label, sec.label));
       if (existing) {
         return {
           ...existing,
@@ -198,7 +365,13 @@ export const OperatorView: React.FC<OperatorViewProps> = ({
   }, [resolvedModules]);
 
   const getSectionPointsList = (sectionName: string) => {
-    return points.filter(p => p.section === sectionName);
+    if (sectionName === 'Ej kategoriserade') {
+      return points.filter(p => {
+        const inAnyDisplaySection = displaySections.some(s => s.label !== 'Ej kategoriserade' && isSectionMatch(p.section || '', s.label));
+        return !p.section || p.section.trim() === '' || !inAnyDisplaySection;
+      });
+    }
+    return points.filter(p => isSectionMatch(p.section || '', sectionName));
   };
 
   const getPointStatusPillColor = (status?: PointStatus) => {
@@ -241,7 +414,7 @@ export const OperatorView: React.FC<OperatorViewProps> = ({
   // Auto-advance helper to load the next unchecked point or go back to list
   const selectNextPoint = (currentPointId: string) => {
     if (!selectedSection) return;
-    const pts = points.filter(p => p.section === selectedSection);
+    const pts = sectionPoints;
     const currentIndex = pts.findIndex(p => p.id === currentPointId);
     if (currentIndex !== -1 && pts.length > 1) {
       // Reorder starting from the next element
@@ -306,6 +479,120 @@ export const OperatorView: React.FC<OperatorViewProps> = ({
   return (
     <div className="flex flex-col gap-6 w-full max-w-7xl mx-auto p-1 animate-in fade-in duration-500">
       
+      {/* HEADER GUIDE / HIERARCHY PICKER FOR MAIN SCREEN */}
+      {!selectedSection && (
+        <div className={`p-5 sm:p-6 rounded-[2.5rem] border ${
+          theme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-200'
+        } shadow-2xl space-y-5 transition-all duration-300`}>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="flex h-2.5 w-2.5 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-500">Operatörens Maskinöversikt • Centerline</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-slate-800 dark:text-white mt-0.5">
+                Välj Produktionslinje & Enhet
+              </h2>
+            </div>
+            
+            <button
+              onClick={() => setShowOnlyDeviations(!showOnlyDeviations)}
+              className={`flex items-center gap-2 px-5 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl border transition-all self-start ${
+                showOnlyDeviations 
+                  ? 'bg-amber-600 text-black border-amber-500 font-sans' 
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800 hover:text-white'
+              }`}
+            >
+              <AlertTriangle size={14} /> {showOnlyDeviations ? 'Visar endast avvikelser' : 'Visa alla punkter'}
+            </button>
+          </div>
+
+          {/* Interactive visual selector widgets */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 border-t border-slate-800/40 pt-5">
+            {/* 1. LINES SELECTION (TACTILE CARDS) */}
+            <div className="space-y-2.5">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <Layers size={12} className="text-blue-500" />
+                1. Aktiv Produktionslinje
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {lines.map(line => {
+                  const isSelected = selectedLine === line.id;
+                  return (
+                    <button
+                      key={line.id}
+                      onClick={() => onSelectLine?.(line.id)}
+                      className={`px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all border cursor-pointer ${
+                        isSelected 
+                          ? 'bg-blue-600 text-white border-blue-500 shadow-md scale-102 font-sans' 
+                          : 'bg-slate-900/60 hover:bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                      }`}
+                    >
+                      {line.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 2. MACHINES SELECTION (TACTILE CARDS) */}
+            <div className="space-y-2.5">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <Cpu size={12} className="text-purple-500" />
+                2. Aktiv Maskinenhet
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {(selectedLine && machines[selectedLine] || []).map(mach => {
+                  const isSelected = selectedMachine === mach;
+                  return (
+                    <button
+                      key={mach}
+                      onClick={() => onSelectMachine?.(mach)}
+                      className={`px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all border cursor-pointer ${
+                        isSelected 
+                          ? 'bg-[#a855f7] text-white border-[#a855f7] shadow-md scale-102 font-sans' 
+                          : 'bg-slate-900/60 hover:bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                      }`}
+                    >
+                      {mach}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 3. CL-PROGRAM FORMATS SELECTION */}
+            <div className="space-y-2.5">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                <Sliders size={12} className="text-emerald-500" />
+                3. Aktivt CL-program (Format)
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {(selectedMachine && (recipes[selectedMachine] || (selectedMachine === 'Packmaskin (Tray Packer - Pilot)' || selectedMachine === defaultMachineName ? ['Standard 24-Pack', 'Slim 12-Pack', 'Promo 4-Pack'] : [])) || []).map(rec => {
+                  const isSelected = activeRecipe === rec;
+                  return (
+                    <button
+                      key={rec}
+                      onClick={() => onSelectRecipe?.(rec)}
+                      className={`px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition-all border cursor-pointer ${
+                        isSelected 
+                          ? 'bg-emerald-600 text-white border-emerald-500 shadow-md scale-102 font-sans' 
+                          : 'bg-slate-900/60 hover:bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
+                      }`}
+                    >
+                      {rec}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* HEADER GUIDE - DONT MAKE ME THINK (DMMT) */}
       {selectedSection && (
         <div className={`p-4 md:p-6 rounded-[2rem] border ${theme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-white border-slate-100'} shadow-md flex flex-col md:flex-row justify-between items-start md:items-center gap-4`}>
@@ -362,7 +649,7 @@ export const OperatorView: React.FC<OperatorViewProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
             transition={{ duration: 0.3 }}
-            className={`p-6 rounded-[2.5rem] border ${
+            className={`p-4 sm:p-6 rounded-[2rem] border ${
               theme === 'dark' 
                 ? 'bg-gradient-to-b from-slate-950 to-slate-900 border-slate-800' 
                 : 'bg-gradient-to-b from-white to-slate-50 border-slate-200'
@@ -377,12 +664,12 @@ export const OperatorView: React.FC<OperatorViewProps> = ({
             />
 
             {/* Simulated 3D blueprint wrapper */}
-            <div className="relative z-10 w-full flex flex-col py-2">
+            <div className="relative z-10 w-full flex flex-col py-1">
               
               {/* 1. INTERAKTIV RITNINGSÖVERSIKT (MACHINE SCHEMATIC BLUEPRINT) */}
-              <div className={`p-2 rounded-[2.2rem] border ${theme === 'dark' ? 'bg-slate-950/40 border-slate-800/80' : 'bg-slate-50 border-slate-200'} mb-8 relative overflow-hidden shadow-inner`}>
+              <div className={`p-1.5 sm:p-2 rounded-[2.2rem] border ${theme === 'dark' ? 'bg-slate-950/40 border-slate-800/80' : 'bg-slate-50 border-slate-200'} mb-4 sm:mb-6 relative overflow-hidden shadow-inner`}>
                 {/* Blueprint Canvas Container */}
-                <div className="relative w-full aspect-[21/9] min-h-[350px] sm:min-h-[460px] lg:min-h-[520px] bg-slate-950 border border-slate-900 rounded-[2rem] overflow-hidden shadow-2xl">
+                <div className="relative w-full aspect-[21/9] h-[55vh] max-h-[calc(100vh-280px)] min-h-[280px] bg-slate-950 border border-slate-900 rounded-[2rem] overflow-hidden shadow-2xl">
                   {/* Local SVG dash animation */}
                   <style>{`
                     @keyframes dash {
@@ -533,14 +820,6 @@ export const OperatorView: React.FC<OperatorViewProps> = ({
                   </div>
                 </div>
               </div>
-
-              {/* Bottom advice banner */}
-              <div className="mt-8 bg-blue-950/20 border border-blue-900/40 rounded-2xl p-4 max-w-2xl mx-auto flex gap-3 items-center">
-                <Info className="text-blue-400 shrink-0" size={20} />
-                <p className="text-[11px] leading-relaxed text-blue-300">
-                  <strong>Interaktiv Maskinlinje:</strong> Klicka direkt på en sektionsmodul i flödesschemat ovan för att zooma in på dess fysiska mätpunkter (setpoints) och få detaljerade instruktioner.
-                </p>
-              </div>
             </div>
           </motion.div>
         ) : (
@@ -557,7 +836,10 @@ export const OperatorView: React.FC<OperatorViewProps> = ({
           >
             {/* LARGE HIGH-RES PHOTO WITH ABSOLUTE DOTS OVERLAY */}
             <div className="lg:col-span-8 flex flex-col gap-4">
-              <div className={`relative w-full aspect-[4/3] sm:aspect-[16/10] rounded-[2rem] border overflow-hidden shadow-2xl ${theme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'}`}>
+              <div 
+                ref={photoContainerRef}
+                className={`relative w-full aspect-[4/3] sm:aspect-[16/10] rounded-[2rem] border overflow-hidden shadow-2xl ${theme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-200'}`}
+              >
                 
                 {/* Dynamiskt högupplöst foto av sektionen */}
                 <div className="absolute inset-0 z-0 select-none">
@@ -588,20 +870,25 @@ export const OperatorView: React.FC<OperatorViewProps> = ({
                   const isCritical = point.criticality === Criticality.P1;
                   const statusColorClass = getPointStatusColor(point);
                   
-                  // Limit the coordinates to fit cleanly
-                  const xCoord = Math.min(95, Math.max(5, point.coordinates.x));
-                  const yCoord = Math.min(95, Math.max(5, point.coordinates.y));
+                  // Use the helper to get coordinates relative to the layout module
+                  const relCoords = getRelativeCoordinates(point);
+                  const xCoord = relCoords.x;
+                  const yCoord = relCoords.y;
 
                   return (
                     <button
                       key={point.id}
                       onClick={() => handlePointClick(point)}
+                      onMouseDown={(e) => handlePointDragStart(e, point.id)}
+                      onTouchStart={(e) => handlePointDragStart(e, point.id)}
                       style={{ 
                         left: `${xCoord}%`, 
                         top: `${yCoord}%`, 
                         transform: 'translate(-50%, -50%)',
                       }}
-                      className="absolute z-20 group focus:outline-none transition-transform duration-300"
+                      className={`absolute z-20 group focus:outline-none transition-transform duration-300 ${
+                        isRepositionMode ? 'cursor-grab active:cursor-grabbing hover:scale-105' : ''
+                      }`}
                     >
                       {/* Pulse ring indicator */}
                       <span className="absolute -inset-4 flex items-center justify-center">
@@ -616,7 +903,9 @@ export const OperatorView: React.FC<OperatorViewProps> = ({
                         isActive 
                           ? 'w-14 h-14 scale-110 ring-4 ring-blue-500' 
                           : 'w-10 h-10 group-hover:scale-110 group-hover:ring-2 group-hover:ring-white'
-                        } ${statusColorClass}`}
+                        } ${statusColorClass} ${
+                          isRepositionMode ? 'border-dashed border-white ring-2 ring-emerald-500 ring-offset-2 ring-offset-slate-950 animate-pulse' : ''
+                        }`}
                       >
                         <span className="text-white text-sm font-extrabold drop-shadow-md">{point.number}</span>
                         
@@ -646,6 +935,26 @@ export const OperatorView: React.FC<OperatorViewProps> = ({
                 {/* Sektion Bakgrundsredigerare (visas för Processingenjörer) */}
                 {canEditLayout && (
                   <div className="absolute top-4 right-4 z-20 flex gap-2">
+                    <button
+                      onClick={() => setIsRepositionMode(!isRepositionMode)}
+                      className={`px-3 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 shadow-lg active:scale-95 ${
+                        isRepositionMode 
+                          ? 'bg-emerald-600 border-emerald-500 text-white animate-pulse' 
+                          : 'bg-slate-950/90 hover:bg-slate-800 border-slate-800 text-slate-300'
+                      }`}
+                    >
+                      <Move size={12} />
+                      {isRepositionMode ? 'Lås punkter' : 'Flytta punkter'}
+                    </button>
+                    {sectionPoints.some(p => p.sectionCoordinates) && (
+                      <button 
+                        onClick={handleResetSectionPointPositions}
+                        className="bg-orange-950/90 hover:bg-orange-600 text-white backdrop-blur-md px-2 py-1.5 rounded-xl border border-slate-800 text-[10px] transition-all shadow-lg active:scale-95 flex items-center justify-center gap-1"
+                        title="Nollställ punktpositioner på fotot"
+                      >
+                        <RotateCcw size={12} /> Nollställ
+                      </button>
+                    )}
                     <input 
                       type="file" 
                       id="section-bg-upload-input" 
@@ -727,7 +1036,7 @@ export const OperatorView: React.FC<OperatorViewProps> = ({
                               alt={`Närbild punkt ${activePoint.number}`} 
                               className="absolute w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity duration-300"
                               style={{
-                                transform: `scale(4) translate(${50 - activePoint.coordinates.x}%, ${50 - activePoint.coordinates.y}%)`,
+                                transform: `scale(4) translate(${50 - getRelativeCoordinates(activePoint).x}%, ${50 - getRelativeCoordinates(activePoint).y}%)`,
                                 transformOrigin: 'center'
                               }}
                             />

@@ -21,6 +21,21 @@ import { DashboardView } from './components/DashboardView';
 import { OperatorView } from './components/OperatorView';
 
 // Factory structure data for cascading dropdowns
+export const cleanSection = (name: string): string => {
+  if (!name) return '';
+  return name
+    .replace(/\s*\([^)]*\)/g, '') // Remove parenthesized suffix like " (1-2)" or " (13)"
+    .trim()
+    .toLowerCase();
+};
+
+export const isSectionMatch = (sec1: string, sec2: string): boolean => {
+  const s1 = cleanSection(sec1);
+  const s2 = cleanSection(sec2);
+  if (!s1 || !s2) return false;
+  return s1 === s2;
+};
+
 const FACTORY_LINES = [
   { id: 'l1', name: 'Produktionslinje 1 (Förpackning - Pilot)' },
   { id: 'l2', name: 'Produktionslinje 2 (Flaskfyllning)' },
@@ -108,6 +123,10 @@ const App: React.FC = () => {
   const [machines, setMachines] = useState<Record<string, string[]>>(() => FACTORY_MACHINES);
   const [sections, setSections] = useState<Record<string, string[]>>(() => MACHINE_SECTIONS);
   
+  const defaultMachineName = React.useMemo(() => {
+    return (machines['l1'] && machines['l1'][0]) || 'Packmaskin (Tray Packer - Pilot)';
+  }, [machines]);
+  
   const [selectedLine, setSelectedLine] = useState<string>('l1');
   const [selectedMachine, setSelectedMachine] = useState<string>('Packmaskin (Tray Packer - Pilot)');
   const [selectedSection, setSelectedSection] = useState<string>('All');
@@ -157,16 +176,27 @@ const App: React.FC = () => {
     setSelectedPoint(null);
   }, [isDesignMode, canEditLayout]);
 
+  // Ensure selectedMachine is valid for the current line
+  useEffect(() => {
+    if (machines && selectedLine) {
+      const machs = machines[selectedLine] || [];
+      if (machs.length > 0 && !machs.includes(selectedMachine)) {
+        // Automatically switch to the first machine in the line if the current machine is deleted or renamed
+        setSelectedMachine(machs[0]);
+      }
+    }
+  }, [machines, selectedLine, selectedMachine]);
+
   // Dynamically resolve active machine CL-programs/recipes
   const activeMachineRecipes = React.useMemo(() => {
     if (selectedMachine && recipes[selectedMachine]) {
       return recipes[selectedMachine];
     }
-    if (selectedMachine === 'Packmaskin (Tray Packer - Pilot)') {
-      return recipes['Packmaskin (Tray Packer - Pilot)'] || DEFAULT_RECIPES;
+    if (selectedMachine === 'Packmaskin (Tray Packer - Pilot)' || selectedMachine === defaultMachineName) {
+      return recipes['Packmaskin (Tray Packer - Pilot)'] || recipes[defaultMachineName] || DEFAULT_RECIPES;
     }
     return recipes[selectedMachine] || [];
-  }, [recipes, selectedMachine]);
+  }, [recipes, selectedMachine, defaultMachineName]);
 
   // Dynamically resolve active visual modules/layout
   const activeLayout = React.useMemo(() => {
@@ -194,11 +224,11 @@ const App: React.FC = () => {
     if (machineBackgrounds[selectedMachine]) {
       return machineBackgrounds[selectedMachine];
     }
-    if (selectedMachine === 'Packmaskin (Tray Packer - Pilot)') {
+    if (selectedMachine === 'Packmaskin (Tray Packer - Pilot)' || selectedMachine === defaultMachineName) {
       return customMapUrl;
     }
     return null;
-  }, [machineBackgrounds, selectedMachine, customMapUrl]);
+  }, [machineBackgrounds, selectedMachine, customMapUrl, defaultMachineName]);
 
   // Fetch initial data & handle login transition
   useEffect(() => {
@@ -803,7 +833,8 @@ const App: React.FC = () => {
     
     const updatedPoints = points.map(p => {
       const isMatch = p.machine === currentMachine || 
-        (!p.machine && currentMachine === 'Packmaskin (Tray Packer - Pilot)');
+        (!p.machine && currentMachine === defaultMachineName) ||
+        (p.machine === 'Packmaskin (Tray Packer - Pilot)' && currentMachine === defaultMachineName);
       const isLineMatch = p.lineId === selectedLine ||
         (!p.lineId && selectedLine === 'l1');
       
@@ -820,7 +851,8 @@ const App: React.FC = () => {
     if (!selectedLine || !selectedMachine) return;
     const machPoints = points.filter(p => {
       const isMatch = p.machine === selectedMachine || 
-        (!p.machine && selectedMachine === 'Packmaskin (Tray Packer - Pilot)');
+        (!p.machine && selectedMachine === defaultMachineName) ||
+        (p.machine === 'Packmaskin (Tray Packer - Pilot)' && selectedMachine === defaultMachineName);
       const isLineMatch = p.lineId === selectedLine ||
         (!p.lineId && selectedLine === 'l1');
       return isMatch && isLineMatch;
@@ -850,7 +882,8 @@ const App: React.FC = () => {
     
     const updatedPoints = points.map(p => {
       const isMatch = p.machine === selectedMachine || 
-        (!p.machine && selectedMachine === 'Packmaskin (Tray Packer - Pilot)');
+        (!p.machine && selectedMachine === defaultMachineName) ||
+        (p.machine === 'Packmaskin (Tray Packer - Pilot)' && selectedMachine === defaultMachineName);
       const isLineMatch = p.lineId === selectedLine ||
         (!p.lineId && selectedLine === 'l1');
       
@@ -909,8 +942,10 @@ const App: React.FC = () => {
     
     const updatedPoints = points.map(p => {
       const matchesLine = !p.lineId || p.lineId === selectedLine;
-      const matchesMachine = !p.machine || p.machine === selectedMachine;
-      if (matchesLine && matchesMachine && p.section === currentSec) {
+      const matchesMachine = p.machine === selectedMachine || 
+        (!p.machine && selectedMachine === defaultMachineName) ||
+        (p.machine === 'Packmaskin (Tray Packer - Pilot)' && selectedMachine === defaultMachineName);
+      if (matchesLine && matchesMachine && isSectionMatch(p.section || '', currentSec)) {
         return { ...p, section: trimmed };
       }
       return p;
@@ -922,7 +957,13 @@ const App: React.FC = () => {
   const handleDeleteSection = () => {
     if (!selectedMachine || !selectedSection || selectedSection === 'All') return;
     const currentSec = selectedSection;
-    const secPoints = points.filter(p => p.section === currentSec && p.machine === selectedMachine && p.lineId === selectedLine);
+    const secPoints = points.filter(p => {
+      const matchesLine = !p.lineId || p.lineId === selectedLine;
+      const matchesMachine = p.machine === selectedMachine || 
+        (!p.machine && selectedMachine === defaultMachineName) ||
+        (p.machine === 'Packmaskin (Tray Packer - Pilot)' && selectedMachine === defaultMachineName);
+      return isSectionMatch(p.section || '', currentSec) && matchesLine && matchesMachine;
+    });
     
     const message = `Är du säker på att du vill ta bort sektionen "${currentSec}"?\n` +
       `Detta kommer att påverka ${secPoints.length} centerline-punkter som tillhör denna sektion.`;
@@ -942,8 +983,10 @@ const App: React.FC = () => {
     
     const updatedPoints = points.map(p => {
       const matchesLine = !p.lineId || p.lineId === selectedLine;
-      const matchesMachine = !p.machine || p.machine === selectedMachine;
-      if (matchesLine && matchesMachine && p.section === currentSec) {
+      const matchesMachine = p.machine === selectedMachine || 
+        (!p.machine && selectedMachine === defaultMachineName) ||
+        (p.machine === 'Packmaskin (Tray Packer - Pilot)' && defaultMachineName);
+      if (matchesLine && matchesMachine && isSectionMatch(p.section || '', currentSec)) {
         return { ...p, section: '' };
       }
       return p;
@@ -1205,7 +1248,7 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <div className={`${activeTab === 'operator' ? 'max-w-7xl xl:max-w-[1550px]' : 'max-w-6xl'} mx-auto w-full p-6 lg:p-10 space-y-8 print:max-w-none print:p-0 print:block`}>
+        <div className={`${activeTab === 'operator' ? 'max-w-7xl xl:max-w-[1550px] p-4 sm:p-6 lg:p-8 space-y-4' : 'max-w-6xl p-6 lg:p-10 space-y-8'} mx-auto w-full print:max-w-none print:p-0 print:block`}>
           
           {/* NY PRINT-HEADER (Endast sida 1, fungerar som "topp-kant" för ramen) */}
           <div className="hidden print:flex bg-[#0070C0] text-white p-8 justify-between items-center mb-6 rounded-none -mx-[12mm]">
@@ -1443,9 +1486,10 @@ const App: React.FC = () => {
                   points={(() => {
                     const disp = points.filter(p => {
                       const matchesLine = !p.lineId || p.lineId === selectedLine;
-                      const matchesMachine = !p.machine || p.machine === selectedMachine || 
-                        (selectedMachine === 'Packmaskin (Tray Packer - Pilot)' && !p.machine);
-                      const matchesSection = selectedSection === 'All' || p.section === selectedSection;
+                      const matchesMachine = p.machine === selectedMachine || 
+                        (!p.machine && selectedMachine === defaultMachineName) ||
+                        (p.machine === 'Packmaskin (Tray Packer - Pilot)' && selectedMachine === defaultMachineName);
+                      const matchesSection = selectedSection === 'All' || isSectionMatch(p.section || '', selectedSection);
                       return matchesLine && matchesMachine && matchesSection;
                     });
                     return disp;
@@ -1469,9 +1513,10 @@ const App: React.FC = () => {
                 points={(() => {
                   const disp = points.filter(p => {
                     const matchesLine = !p.lineId || p.lineId === selectedLine;
-                    const matchesMachine = !p.machine || p.machine === selectedMachine || 
-                      (selectedMachine === 'Packmaskin (Tray Packer - Pilot)' && !p.machine);
-                    const matchesSection = selectedSection === 'All' || p.section === selectedSection;
+                    const matchesMachine = p.machine === selectedMachine || 
+                      (!p.machine && selectedMachine === defaultMachineName) ||
+                      (p.machine === 'Packmaskin (Tray Packer - Pilot)' && selectedMachine === defaultMachineName);
+                    const matchesSection = selectedSection === 'All' || isSectionMatch(p.section || '', selectedSection);
                     return matchesLine && matchesMachine && matchesSection;
                   });
                   return [...disp].sort((a, b) => a.number - b.number);
@@ -1493,8 +1538,9 @@ const App: React.FC = () => {
                 <OperatorView
                   points={points.filter(p => {
                     const matchesLine = !p.lineId || p.lineId === selectedLine;
-                    const matchesMachine = !p.machine || p.machine === selectedMachine || 
-                      (selectedMachine === 'Packmaskin (Tray Packer - Pilot)' && !p.machine);
+                    const matchesMachine = p.machine === selectedMachine || 
+                      (!p.machine && selectedMachine === defaultMachineName) ||
+                      (p.machine === 'Packmaskin (Tray Packer - Pilot)' && selectedMachine === defaultMachineName);
                     return matchesLine && matchesMachine;
                   })}
                   layout={activeLayout}
@@ -1522,6 +1568,34 @@ const App: React.FC = () => {
                   machineBackgrounds={machineBackgrounds}
                   onUpdateMachineBackgrounds={setMachineBackgrounds}
                   canEditLayout={canEditLayout}
+                  onUpdatePoint={handleUpdatePointAndLog}
+                  onUpdatePoints={(updatedSubset) => {
+                    const subsetMap = new Map(updatedSubset.map(p => [p.id, p]));
+                    setPoints(prevPoints => 
+                      prevPoints.map(p => subsetMap.has(p.id) ? subsetMap.get(p.id)! : p)
+                    );
+                  }}
+                  selectedLine={selectedLine}
+                  lines={lines}
+                  machines={machines}
+                  recipes={recipes}
+                  sections={sections}
+                  onSelectLine={(val) => {
+                    setSelectedLine(val);
+                    const machlist = machines[val] || [];
+                    const firstMachine = machlist[0] || '';
+                    setSelectedMachine(firstMachine);
+                    setSelectedSection('All');
+                    const currentRecs = recipes[firstMachine] || (firstMachine === 'Packmaskin (Tray Packer - Pilot)' || firstMachine === defaultMachineName ? DEFAULT_RECIPES : []);
+                    setActiveRecipe(currentRecs[0] || '');
+                  }}
+                  onSelectMachine={(val) => {
+                    setSelectedMachine(val);
+                    setSelectedSection('All');
+                    const currentRecs = recipes[val] || (val === 'Packmaskin (Tray Packer - Pilot)' || val === defaultMachineName ? DEFAULT_RECIPES : []);
+                    setActiveRecipe(currentRecs[0] || '');
+                  }}
+                  onSelectRecipe={setActiveRecipe}
                 />
               )}
               {activeTab === 'phasing' && <PhasingGauge currentDegree={0} points={points} theme={theme} />}
@@ -1529,8 +1603,9 @@ const App: React.FC = () => {
                 <DashboardView 
                   points={points.filter(p => {
                     const matchesLine = !p.lineId || p.lineId === selectedLine;
-                    const matchesMachine = !p.machine || p.machine === selectedMachine || 
-                      (selectedMachine === 'Packmaskin (Tray Packer - Pilot)' && !p.machine);
+                    const matchesMachine = p.machine === selectedMachine || 
+                      (!p.machine && selectedMachine === defaultMachineName) ||
+                      (p.machine === 'Packmaskin (Tray Packer - Pilot)' && selectedMachine === defaultMachineName);
                     return matchesLine && matchesMachine;
                   })}
                   pointHistory={pointHistory}
@@ -1545,8 +1620,9 @@ const App: React.FC = () => {
                 <HistoryView 
                   points={points.filter(p => {
                     const matchesLine = !p.lineId || p.lineId === selectedLine;
-                    const matchesMachine = !p.machine || p.machine === selectedMachine || 
-                      (selectedMachine === 'Packmaskin (Tray Packer - Pilot)' && !p.machine);
+                    const matchesMachine = p.machine === selectedMachine || 
+                      (!p.machine && selectedMachine === defaultMachineName) ||
+                      (p.machine === 'Packmaskin (Tray Packer - Pilot)' && selectedMachine === defaultMachineName);
                     return matchesLine && matchesMachine;
                   })}
                   pointHistory={pointHistory}
